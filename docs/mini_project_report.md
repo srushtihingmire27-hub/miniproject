@@ -694,202 +694,2104 @@ requirement, while each module owns a genuinely distinct business concern (no fi
 
 # 6. Module Design
 
-> **Status: Pending — to be completed in Phase 2 (Detailed Software Design).**
-> The module list is fixed at this stage (§5.4 of the proposal). Phase 2 will produce, for every module: source and
-> header filename, purpose, responsibilities, public functions, data used or owned, dependencies, and the status
-> codes it can return.
+> **Status: Complete.** The design below is the design that was implemented and verified.
 
 ## 6.1 Module Summary
 
 | Module Name | Source File | Header File | Responsibility |
 | --- | --- | --- | --- |
 | Main application | `src/main.c` | Not applicable | Controls the high-level application flow |
-| Shared data model | Not applicable (header only) | `include/casefile.h` | Structures, enumerations, capacity constants, status codes |
-| Validation | `src/validation.c` | `include/validation.h` | Reusable input and data validation |
+| Shared data model | `src/casefile.c` | `include/casefile.h` | Record structures, enumerations, constants, status codes and the identifier lookups |
+| Validation | `src/validation.c` | `include/validation.h` | Every reusable input and data check |
 | Case manager | `src/case_manager.c` | `include/case_manager.h` | Crime case register lifecycle |
 | Suspect manager | `src/suspect_manager.c` | `include/suspect_manager.h` | Suspect records and physical profile |
-| Evidence manager | `src/evidence_manager.c` | `include/evidence_manager.h` | Forensic evidence, analysis attributes, chain of custody |
+| Evidence manager | `src/evidence_manager.c` | `include/evidence_manager.h` | Forensic evidence, analysis attributes and chain of custody |
 | Witness manager | `src/witness_manager.c` | `include/witness_manager.h` | Witness records and statement references |
 | Investigation | `src/investigation.c` | `include/investigation.h` | Rule-based scoring, ranking, progress computation |
 | Report generator | `src/report_generator.c` | `include/report_generator.h` | Investigation and evidence report composition |
 | Storage | `src/storage.c` | `include/storage.h` | File persistence, format validation, I/O error reporting |
 
+There are **nine implementation modules in addition to `main.c`**, comfortably above the required three.
+
 ## 6.2 Detailed Module Description
 
-> Phase 2 will complete one subsection per module using the official subsection structure (source file, header file,
-> purpose, responsibilities, public functions, data used or owned, dependencies, possible errors).
+### Module: Main application
 
----
+Source file: `src/main.c`
+
+Header file: Not applicable
+
+Purpose: Control the high-level application flow.
+
+Responsibilities:
+
+- Initialise the database and release it on exit.
+- Load the stored data and report what was found.
+- Present the hierarchical menu and collect the user's choice.
+- Dispatch each choice to the module that owns it.
+- Print the returned status and the result.
+- Save the data when the user asks, and again on exit.
+
+Public functions: `main` only. Every other function in the file is `static`.
+
+Data used or owned: the `CasefileDb_t *` pointer.
+
+Dependencies: every other module.
+
+Possible errors: handles every status the modules return; the exit code reflects whether the final save succeeded.
+
+### Module: Shared data model
+
+Source file: `src/casefile.c`
+
+Header file: `include/casefile.h`
+
+Purpose: Define the record structures, the enumerations, the capacity constants and the status codes that every
+module agrees on, and answer the identifier-uniqueness questions that several modules need to ask.
+
+Responsibilities:
+
+- Define `Case_t`, `Suspect_t`, `PhysicalProfile_t`, `Evidence_t`, `Attribute_t`, `CustodyEvent_t`, `Witness_t`,
+  `MatchFactor_t`, `SuspectScore_t`, `AnalysisResult_t` and `CasefileDb_t`.
+- Define the nine enumerations and the `CfStatus_t` error vocabulary.
+- Create and release the database.
+- Test whether a case, suspect, evidence, witness or statement identifier is already in use.
+
+Public functions: `casefile_createDatabase`, `casefile_destroyDatabase`, `casefileCaseIdExists`,
+`casefileSuspectIdExists`, `casefileEvidenceIdExists`, `casefileWitnessIdExists`, `casefileStatementRefExists`.
+
+Data used or owned: the `CasefileDb_t` aggregate.
+
+Dependencies: none.
+
+Possible errors: `CF_ERR_NULL_POINTER`, `CF_ERR_INVALID_ARGUMENT`.
+
+### Module: Validation
+
+Source file: `src/validation.c`
+
+Header file: `include/validation.h`
+
+Purpose: Provide every reusable check that the rest of the application relies on.
+
+Responsibilities:
+
+- Read one bounded line from standard input and discard any over-long remainder.
+- Trim whitespace and copy values into fixed-size fields safely.
+- Parse integers, rejecting trailing garbage.
+- Check dates against the real calendar, including leap years.
+- Check identifiers, phone numbers, ages, heights and shoe sizes.
+- Convert every enumerated choice from and to its name.
+- Describe a status code with a message that is never empty.
+
+Public functions: `validationReadLine`, `validationTrim`, `validationCopyField`, `validationIsNotEmpty`,
+`validationIsPrintable`, `validationCheckLength`, `validationCompareIgnoreCase`, `validationContainsIgnoreCase`,
+`validationParseInt`, `validationReadInt`, `validationIsValidDate`, `validationIsValidIdentifier`,
+`validationIsValidPhone`, `validationIsValidAge`, `validationIsValidHeight`, `validationIsValidShoeSize`,
+`validationParseCaseStatus`, `validationParseCasePriority`, `validationParseCrimeType`,
+`validationParseSuspectStatus`, `validationParseEvidenceCategory`, `validationParseEvidenceStatus`,
+`validationParseCustodyAction`, `validationParseAttributeKey`, `validationCaseStatusName`,
+`validationCasePriorityName`, `validationCrimeTypeName`, `validationSuspectStatusName`,
+`validationEvidenceCategoryName`, `validationEvidenceStatusName`, `validationCustodyActionName`,
+`validationAttributeKeyName`, `validationStatusMessage`.
+
+Data used or owned: none; the module is stateless apart from standard input.
+
+Dependencies: the shared data model.
+
+Possible errors: `CF_ERR_NULL_POINTER`, `CF_ERR_INVALID_ARGUMENT`, `CF_ERR_INVALID_FORMAT`, `CF_ERR_EMPTY_INPUT`,
+`CF_ERR_INVALID_ENUM`, `CF_ERR_FILE_READ`.
+
+### Module: Case manager
+
+Source file: `src/case_manager.c`
+
+Header file: `include/case_manager.h`
+
+Purpose: Own the lifecycle of the crime case register.
+
+Responsibilities:
+
+- Generate a unique case identifier of the form `CF-YYYY-NNNN`.
+- Register a case, validating every field before it is stored.
+- Look a case up by identifier and copy it out.
+- List the register and filter it by status or crime type.
+- Update the editable fields of a case, preserving its identifier.
+- Change the investigation status.
+- Delete a case and cascade to the suspect, evidence and witness records that belong to it.
+
+Public functions: `caseManager_addCase`, `caseManager_findById`, `caseManager_getCase`, `caseManager_listAll`,
+`caseManager_filterByStatus`, `caseManager_filterByCrimeType`, `caseManager_update`, `caseManager_setStatus`,
+`caseManager_delete`, `caseManager_countByStatus`, `caseManager_validateNewId`, `caseManager_generateId`.
+
+Data used or owned: the `cases` array and `caseCount` of the database.
+
+Dependencies: the shared data model and the validation module.
+
+Possible errors: `CF_ERR_NULL_POINTER`, `CF_ERR_INVALID_ARGUMENT`, `CF_ERR_EMPTY_INPUT`, `CF_ERR_INVALID_LENGTH`,
+`CF_ERR_INVALID_DATE`, `CF_ERR_INVALID_ENUM`, `CF_ERR_NOT_FOUND`, `CF_ERR_DUPLICATE_ID`, `CF_ERR_CAPACITY_FULL`.
+
+### Module: Suspect manager
+
+Source file: `src/suspect_manager.c`
+
+Header file: `include/suspect_manager.h`
+
+Purpose: Own the suspect register and the physical descriptor profile used for comparison.
+
+Responsibilities:
+
+- Generate a unique suspect identifier of the form `SU-NNNNN`.
+- Add a suspect to a case that already exists.
+- List the suspects of a case and search them by partial name.
+- Update a suspect, preserving its identifier and parent case.
+- Delete a suspect.
+- Store the physical profile and extend the list of known vehicles.
+
+Public functions: `suspectManager_add`, `suspectManager_findById`, `suspectManager_get`,
+`suspectManager_listByCase`, `suspectManager_searchByName`, `suspectManager_update`, `suspectManager_delete`,
+`suspectManager_setPhysicalProfile`, `suspectManager_addVehicle`, `suspectManager_generateId`,
+`suspectManager_countByCase`.
+
+Data used or owned: the `suspects` array and `suspectCount` of the database.
+
+Dependencies: the shared data model, the validation module and the case manager.
+
+Possible errors: `CF_ERR_NULL_POINTER`, `CF_ERR_INVALID_ARGUMENT`, `CF_ERR_EMPTY_INPUT`, `CF_ERR_INVALID_LENGTH`,
+`CF_ERR_INVALID_ENUM`, `CF_ERR_NOT_FOUND`, `CF_ERR_CAPACITY_FULL`.
+
+### Module: Evidence manager
+
+Source file: `src/evidence_manager.c`
+
+Header file: `include/evidence_manager.h`
+
+Purpose: Own the forensic evidence register, the analysis attributes and the chain-of-custody history.
+
+Responsibilities:
+
+- Generate a unique evidence identifier of the form `EV-NNNNN`.
+- Register evidence against a case that already exists.
+- List, search and filter the evidence register.
+- Update the editable fields of an item, keeping its attributes and its custody history.
+- Change the examination status.
+- Attach an analysis attribute, replacing a key that is already present.
+- Append a chain-of-custody event and read the history back in order.
+- Delete an evidence item.
+
+Public functions: `evidenceManager_add`, `evidenceManager_findById`, `evidenceManager_get`,
+`evidenceManager_listByCase`, `evidenceManager_searchByDescription`, `evidenceManager_filterByCategory`,
+`evidenceManager_filterByStatus`, `evidenceManager_update`, `evidenceManager_setStatus`,
+`evidenceManager_addAttribute`, `evidenceManager_addCustodyEvent`, `evidenceManager_getCustodyHistory`,
+`evidenceManager_delete`, `evidenceManager_generateId`, `evidenceManager_countByCase`,
+`evidenceManager_countAnalysed`.
+
+Data used or owned: the `evidence` array and `evidenceCount` of the database.
+
+Dependencies: the shared data model, the validation module and the case manager.
+
+Possible errors: `CF_ERR_NULL_POINTER`, `CF_ERR_INVALID_ARGUMENT`, `CF_ERR_EMPTY_INPUT`, `CF_ERR_INVALID_LENGTH`,
+`CF_ERR_INVALID_DATE`, `CF_ERR_INVALID_ENUM`, `CF_ERR_NOT_FOUND`, `CF_ERR_CAPACITY_FULL`.
+
+### Module: Witness manager
+
+Source file: `src/witness_manager.c`
+
+Header file: `include/witness_manager.h`
+
+Purpose: Own the witness register and the statement reference identifiers.
+
+Responsibilities:
+
+- Generate a unique witness identifier and a unique statement reference.
+- Register a witness against a case that already exists.
+- List the witnesses of a case and search them by partial name.
+- Update a witness, preserving its identifier, its statement reference and its parent case.
+- Set or clear the verification flag of a statement.
+- Delete a witness.
+
+Public functions: `witnessManager_add`, `witnessManager_findById`, `witnessManager_get`,
+`witnessManager_listByCase`, `witnessManager_searchByName`, `witnessManager_update`,
+`witnessManager_setVerified`, `witnessManager_delete`, `witnessManager_generateId`,
+`witnessManager_generateStatementRef`, `witnessManager_countByCase`, `witnessManager_countVerified`.
+
+Data used or owned: the `witnesses` array and `witnessCount` of the database.
+
+Dependencies: the shared data model, the validation module and the case manager.
+
+Possible errors: `CF_ERR_NULL_POINTER`, `CF_ERR_INVALID_ARGUMENT`, `CF_ERR_EMPTY_INPUT`, `CF_ERR_INVALID_LENGTH`,
+`CF_ERR_INVALID_DATE`, `CF_ERR_INVALID_ENUM`, `CF_ERR_NOT_FOUND`, `CF_ERR_CAPACITY_FULL`.
+
+### Module: Investigation
+
+Source file: `src/investigation.c`
+
+Header file: `include/investigation.h`
+
+Purpose: Compare the recorded evidence attributes with the suspect profiles and turn the comparison into a
+transparent, explainable score.
+
+Responsibilities:
+
+- Apply each comparison rule in isolation, so that a rule can be tested on its own.
+- Score every suspect of a case and record every factor that was checked.
+- Rank the suspects by descending score, keeping the original order for equal scores.
+- Detect the case where the evidence cannot support a score and report it as such.
+- Compute the investigation progress from the real record counts.
+- Supply the educational disclaimer and the score band descriptions.
+
+Public functions: `investigation_analyseCase`, `investigation_compareAttribute`, `investigation_weightForKey`,
+`investigation_rankSuspects`, `investigation_computeProgress`, `investigation_getDisclaimer`,
+`investigation_describeScore`.
+
+Data used or owned: the `AnalysisResult_t` produced for one case.
+
+Dependencies: the shared data model, the validation module and the three managers (read-only).
+
+Possible errors: `CF_ERR_NULL_POINTER`, `CF_ERR_INVALID_ARGUMENT`, `CF_ERR_NOT_FOUND`,
+`CF_ERR_INSUFFICIENT_EVIDENCE`.
+
+### Module: Report generator
+
+Source file: `src/report_generator.c`
+
+Header file: `include/report_generator.h`
+
+Purpose: Compose the human-readable investigation and evidence reports and write them to a file.
+
+Responsibilities:
+
+- Build the case summary: identity, status, progress, the suspect ranking with its factors, the evidence register
+  and the witness statements, followed by the disclaimer.
+- Build the evidence summary: every item with its attributes and its custody history.
+- Write a report to the `reports/` directory.
+
+Public functions: `report_generateCaseSummary`, `report_generateEvidenceSummary`, `report_saveToFile`.
+
+Data used or owned: none; the reports are written into a caller-supplied buffer.
+
+Dependencies: the shared data model, the validation module, the managers (read-only) and the investigation module.
+
+Possible errors: `CF_ERR_NULL_POINTER`, `CF_ERR_INVALID_ARGUMENT`, `CF_ERR_NOT_FOUND`, `CF_ERR_FILE_WRITE`.
+
+### Module: Storage
+
+Source file: `src/storage.c`
+
+Header file: `include/storage.h`
+
+Purpose: Convert the records to and from the text files and validate that the files are in the expected format.
+
+Responsibilities:
+
+- Save every record type and load every record type.
+- Write and verify the format signature at the top of each file.
+- Detect a missing, empty or foreign file and report the condition.
+- Sanitise a value so that it cannot break the record layout.
+- Check the result of every read and every write.
+
+Public functions: `storage_loadAll`, `storage_saveAll`, `storage_validateFormat`, `storage_buildPath`,
+`storage_fileNameByIndex`, `storage_ensureDataDirectory`, `storage_writeLine`, `storage_sanitizeField`.
+
+Data used or owned: the five files in the `data/` directory.
+
+Dependencies: the shared data model and the validation module.
+
+Possible errors: `CF_ERR_NULL_POINTER`, `CF_ERR_INVALID_ARGUMENT`, `CF_ERR_FILE_OPEN`, `CF_ERR_FILE_READ`,
+`CF_ERR_FILE_WRITE`, `CF_ERR_CORRUPT_FILE`, `CF_ERR_CAPACITY_FULL`.
 
 # 7. Data Design
 
-> **Status: Pending — to be completed in Phase 2.**
-> The structures, enumerations and constants are sketched in the proposal (§2.3, §3.3, §5.5). Phase 2 will produce the
-> full definitions, the member tables, the enumeration constant tables, the constants table and the complete data
-> dictionary with validation rules.
+> **Status: Complete.** The definitions below are the ones in `include/casefile.h` as implemented.
 
 ## 7.1 Structure Definitions
 
-*Pending Phase 2 — planned structures: `Case_t`, `Suspect_t`, `Evidence_t`, `CustodyEvent_t`, `Witness_t`,
-`CasefileDb_t`, `Attribute_t`, `MatchFactor_t`, `SuspectScore_t`.*
+### Structure: Case_t
+
+Purpose: Represents one registered crime case.
+
+```
+typedef struct
+{
+    char caseId[ID_LENGTH];
+    char title[TITLE_LENGTH];
+    CrimeType_t crimeType;
+    CasePriority_t priority;
+    CaseStatus_t status;
+    char incidentDate[DATE_LENGTH];
+    char location[LOCATION_LENGTH];
+    char assignedOfficer[OFFICER_LENGTH];
+    char summary[TEXT_LENGTH];
+} Case_t;
+```
+
+| Member | C Type | Valid Range or Size | Description |
+| --- | --- | --- | --- |
+| `caseId` | `char[16]` | `CF-YYYY-NNNN` | The unique reference of the case |
+| `title` | `char[64]` | 1–63 characters | The short name of the case |
+| `crimeType` | `CrimeType_t` | 0–8 | The category of crime |
+| `priority` | `CasePriority_t` | 0–3 | How urgently the case is worked |
+| `status` | `CaseStatus_t` | 0–4 | Where the investigation has reached |
+| `incidentDate` | `char[11]` | `YYYY-MM-DD` | When the incident happened |
+| `location` | `char[48]` | 0–47 characters | Where the incident happened |
+| `assignedOfficer` | `char[48]` | 0–47 characters | Who owns the case |
+| `summary` | `char[128]` | 0–127 characters | The narrative summary |
+
+### Structure: PhysicalProfile_t
+
+Purpose: Holds the descriptors of a suspect that are compared with the evidence attributes.
+
+```
+typedef struct
+{
+    char gender[NAME_LENGTH];
+    int heightCm;
+    char hairColour[NAME_LENGTH];
+    int shoeSize;
+    char bloodGroup[NAME_LENGTH];
+    char vehicles[MAX_VEHICLES][VEHICLE_LENGTH];
+    int vehicleCount;
+} PhysicalProfile_t;
+```
+
+| Member | C Type | Valid Range or Size | Description |
+| --- | --- | --- | --- |
+| `gender` | `char[48]` | 0–47 characters | Compared with the `gender` attribute |
+| `heightCm` | `int` | 100–250, or −1 when unknown | Compared with the `height` band |
+| `hairColour` | `char[48]` | 0–47 characters | Compared with the `hair` attribute |
+| `shoeSize` | `int` | 30–52, or −1 when unknown | Compared with the `shoe_size` band |
+| `bloodGroup` | `char[48]` | 0–47 characters | Compared with the `blood_group` attribute |
+| `vehicles` | `char[3][16]` | Up to 3 registrations | Compared with the `vehicle` attribute |
+| `vehicleCount` | `int` | 0–3 | How many registrations are held |
+
+### Structure: Suspect_t
+
+Purpose: Represents one suspect linked to a case.
+
+```
+typedef struct
+{
+    char suspectId[ID_LENGTH];
+    char caseId[ID_LENGTH];
+    char fullName[NAME_LENGTH];
+    int age;
+    char phone[PHONE_LENGTH];
+    char address[ADDRESS_LENGTH];
+    char alibi[ALIBI_LENGTH];
+    char motive[MOTIVE_LENGTH];
+    SuspectStatus_t status;
+    PhysicalProfile_t physical;
+} Suspect_t;
+```
+
+| Member | C Type | Valid Range or Size | Description |
+| --- | --- | --- | --- |
+| `suspectId` | `char[16]` | `SU-NNNNN` | The unique reference of the suspect |
+| `caseId` | `char[16]` | An existing case identifier | The parent case |
+| `fullName` | `char[48]` | 1–47 characters | The name of the suspect |
+| `age` | `int` | 1–120 | The age in years |
+| `phone` | `char[16]` | 7–15 digits | The contact number |
+| `address` | `char[80]` | 0–79 characters | The address |
+| `alibi` | `char[80]` | 0–79 characters | The stated alibi |
+| `motive` | `char[80]` | 0–79 characters | The possible motive |
+| `status` | `SuspectStatus_t` | 0–4 | The standing of the suspect |
+| `physical` | `PhysicalProfile_t` | — | The descriptors used for comparison |
+
+### Structure: Attribute_t
+
+Purpose: One recorded characteristic of an evidence item.
+
+```
+typedef struct
+{
+    AttributeKey_t key;
+    char value[ATTRIBUTE_VALUE_LENGTH];
+} Attribute_t;
+```
+
+| Member | C Type | Valid Range or Size | Description |
+| --- | --- | --- | --- |
+| `key` | `AttributeKey_t` | 0–5 | Which characteristic is recorded |
+| `value` | `char[32]` | 1–31 characters | The recorded value, for example `175-185` |
+
+### Structure: CustodyEvent_t
+
+Purpose: One movement of an evidence item.
+
+```
+typedef struct
+{
+    CustodyAction_t action;
+    char timestamp[DATE_LENGTH];
+    char fromHandler[HANDLER_LENGTH];
+    char toHandler[HANDLER_LENGTH];
+    char location[LOCATION_LENGTH];
+    char remarks[CUSTODY_REMARK_LENGTH];
+} CustodyEvent_t;
+```
+
+| Member | C Type | Valid Range or Size | Description |
+| --- | --- | --- | --- |
+| `action` | `CustodyAction_t` | 0–4 | What happened to the item |
+| `timestamp` | `char[11]` | `YYYY-MM-DD` | When it happened |
+| `fromHandler` | `char[24]` | 1–23 characters | Who released the item |
+| `toHandler` | `char[24]` | 1–23 characters | Who received the item |
+| `location` | `char[48]` | 0–47 characters | Where it was at that moment |
+| `remarks` | `char[64]` | 0–63 characters | Any further note |
+
+### Structure: Evidence_t
+
+Purpose: Represents one forensic evidence item with its attributes and its custody history.
+
+```
+typedef struct
+{
+    char evidenceId[ID_LENGTH];
+    char caseId[ID_LENGTH];
+    EvidenceCategory_t category;
+    char description[EVIDENCE_DESC_LENGTH];
+    char collectionDate[DATE_LENGTH];
+    char collectionLocation[LOCATION_LENGTH];
+    char collectedBy[NAME_LENGTH];
+    EvidenceStatus_t status;
+    Attribute_t attributes[MAX_EVIDENCE_ATTRIBUTES];
+    int attributeCount;
+    CustodyEvent_t custody[MAX_CUSTODY_EVENTS];
+    int custodyCount;
+} Evidence_t;
+```
+
+| Member | C Type | Valid Range or Size | Description |
+| --- | --- | --- | --- |
+| `evidenceId` | `char[16]` | `EV-NNNNN` | The unique reference of the item |
+| `caseId` | `char[16]` | An existing case identifier | The parent case |
+| `category` | `EvidenceCategory_t` | 0–7 | The forensic category |
+| `description` | `char[112]` | 1–111 characters | What the item is |
+| `collectionDate` | `char[11]` | `YYYY-MM-DD` | When it was collected |
+| `collectionLocation` | `char[48]` | 0–47 characters | Where it was collected |
+| `collectedBy` | `char[48]` | 0–47 characters | Who collected it |
+| `status` | `EvidenceStatus_t` | 0–5 | How far the examination has progressed |
+| `attributes` | `Attribute_t[6]` | Up to 6 | The recorded characteristics |
+| `attributeCount` | `int` | 0–6 | How many attributes are held |
+| `custody` | `CustodyEvent_t[12]` | Up to 12 | The custody history, in order |
+| `custodyCount` | `int` | 0–12 | How many events are held |
+
+### Structure: Witness_t
+
+Purpose: Represents one witness linked to a case.
+
+```
+typedef struct
+{
+    char witnessId[ID_LENGTH];
+    char caseId[ID_LENGTH];
+    char statementRef[ID_LENGTH];
+    char fullName[NAME_LENGTH];
+    char phone[PHONE_LENGTH];
+    char statement[STATEMENT_LENGTH];
+    char recordedDate[DATE_LENGTH];
+    int verified;
+} Witness_t;
+```
+
+| Member | C Type | Valid Range or Size | Description |
+| --- | --- | --- | --- |
+| `witnessId` | `char[16]` | `WI-NNNNN` | The unique reference of the witness |
+| `caseId` | `char[16]` | An existing case identifier | The parent case |
+| `statementRef` | `char[16]` | `ST-NNNNN` | The reference of the statement |
+| `fullName` | `char[48]` | 1–47 characters | The name of the witness |
+| `phone` | `char[16]` | 7–15 digits | The contact number |
+| `statement` | `char[192]` | 1–191 characters | What the witness said |
+| `recordedDate` | `char[11]` | `YYYY-MM-DD` | When the statement was taken |
+| `verified` | `int` | 0 or 1 | Whether the statement has been corroborated |
+
+### Structure: MatchFactor_t
+
+Purpose: One attribute that was checked against a suspect, whether it matched or not.
+
+```
+typedef struct
+{
+    char evidenceId[ID_LENGTH];
+    AttributeKey_t key;
+    char evidenceValue[ATTRIBUTE_VALUE_LENGTH];
+    char suspectValue[ATTRIBUTE_VALUE_LENGTH];
+    int weight;
+    int matched;
+} MatchFactor_t;
+```
+
+| Member | C Type | Valid Range or Size | Description |
+| --- | --- | --- | --- |
+| `evidenceId` | `char[16]` | An evidence identifier | Which item carried the attribute |
+| `key` | `AttributeKey_t` | 0–5 | Which characteristic was compared |
+| `evidenceValue` | `char[32]` | 0–31 characters | The value recorded against the evidence |
+| `suspectValue` | `char[32]` | 0–31 characters | The value recorded against the suspect |
+| `weight` | `int` | 0–25 | The weight, zero when the values do not match |
+| `matched` | `int` | 0 or 1 | Whether the values coincide |
+
+### Structure: SuspectScore_t
+
+Purpose: The score of one suspect together with the factors behind it.
+
+```
+typedef struct
+{
+    char suspectId[ID_LENGTH];
+    char suspectName[NAME_LENGTH];
+    int score;
+    int matchedCount;
+    int checkedCount;
+    MatchFactor_t factors[MAX_MATCH_FACTORS];
+    int factorCount;
+} SuspectScore_t;
+```
+
+| Member | C Type | Valid Range or Size | Description |
+| --- | --- | --- | --- |
+| `suspectId` | `char[16]` | A suspect identifier | Who was scored |
+| `suspectName` | `char[48]` | 0–47 characters | The name, for the report |
+| `score` | `int` | 0–100 | The decision-support indicator |
+| `matchedCount` | `int` | 0–12 | How many attributes coincided |
+| `checkedCount` | `int` | 0–12 | How many attributes were compared |
+| `factors` | `MatchFactor_t[12]` | Up to 12 | Every factor that was checked |
+| `factorCount` | `int` | 0–12 | How many factors are held |
+
+### Structure: AnalysisResult_t
+
+Purpose: The scores and factors of every suspect of one case.
+
+```
+typedef struct
+{
+    int evaluated;
+    int comparableEvidence;
+    SuspectScore_t suspects[MAX_RANKED_SUSPECTS];
+    int suspectCount;
+} AnalysisResult_t;
+```
+
+| Member | C Type | Valid Range or Size | Description |
+| --- | --- | --- | --- |
+| `evaluated` | `int` | 0–100 | How many suspects were scored |
+| `comparableEvidence` | `int` | 0–400 | How many evidence items carried a comparable attribute |
+| `suspects` | `SuspectScore_t[100]` | Up to 100 | The scores, in ranked order |
+| `suspectCount` | `int` | 0–100 | How many scores are held |
+
+### Structure: CasefileDb_t
+
+Purpose: The complete in-memory database.
+
+```
+typedef struct
+{
+    Case_t cases[MAX_CASES];
+    size_t caseCount;
+    Suspect_t suspects[MAX_SUSPECTS];
+    size_t suspectCount;
+    Evidence_t evidence[MAX_EVIDENCE];
+    size_t evidenceCount;
+    Witness_t witnesses[MAX_WITNESSES];
+    size_t witnessCount;
+} CasefileDb_t;
+```
+
+| Member | C Type | Valid Range or Size | Description |
+| --- | --- | --- | --- |
+| `cases` | `Case_t[100]` | Up to 100 | The case register |
+| `caseCount` | `size_t` | 0–100 | How many cases are held |
+| `suspects` | `Suspect_t[400]` | Up to 400 | The suspect register |
+| `suspectCount` | `size_t` | 0–400 | How many suspects are held |
+| `evidence` | `Evidence_t[400]` | Up to 400 | The evidence register |
+| `evidenceCount` | `size_t` | 0–400 | How many evidence items are held |
+| `witnesses` | `Witness_t[300]` | Up to 300 | The witness register |
+| `witnessCount` | `size_t` | 0–300 | How many witnesses are held |
+
+> The structure is about 1.4 MB, which is why it is created on the heap by `casefile_createDatabase()` rather than
+> being declared as a local variable.
 
 ## 7.2 Enumeration Definitions
 
-*Pending Phase 2 — planned enumerations: `CaseStatus_t`, `CasePriority_t`, `CrimeType_t`, `SuspectStatus_t`,
-`EvidenceCategory_t`, `EvidenceStatus_t`, `CustodyAction_t`, `AttributeKey_t`, `CfStatus_t`.*
+### Enumeration: CfStatus_t
+
+Purpose: The single error vocabulary returned across every module boundary.
+
+```
+typedef enum
+{
+    CF_SUCCESS = 0,
+    CF_ERR_NULL_POINTER,
+    CF_ERR_INVALID_ARGUMENT,
+    CF_ERR_INVALID_FORMAT,
+    CF_ERR_INVALID_DATE,
+    CF_ERR_INVALID_ENUM,
+    CF_ERR_INVALID_LENGTH,
+    CF_ERR_EMPTY_INPUT,
+    CF_ERR_NOT_FOUND,
+    CF_ERR_DUPLICATE_ID,
+    CF_ERR_CAPACITY_FULL,
+    CF_ERR_FILE_OPEN,
+    CF_ERR_FILE_READ,
+    CF_ERR_FILE_WRITE,
+    CF_ERR_CORRUPT_FILE,
+    CF_ERR_INSUFFICIENT_EVIDENCE,
+    CF_ERR_INTERNAL
+} CfStatus_t;
+```
+
+| Enumeration Constant | Meaning |
+| --- | --- |
+| `CF_SUCCESS` | The operation completed. |
+| `CF_ERR_NULL_POINTER` | A required pointer argument was `NULL`. |
+| `CF_ERR_INVALID_ARGUMENT` | An argument was outside its permitted range. |
+| `CF_ERR_INVALID_FORMAT` | A string was not in the expected format. |
+| `CF_ERR_INVALID_DATE` | A date was not a real calendar date. |
+| `CF_ERR_INVALID_ENUM` | A value was not one of the permitted choices. |
+| `CF_ERR_INVALID_LENGTH` | A string was too long for its field. |
+| `CF_ERR_EMPTY_INPUT` | A required value was left empty. |
+| `CF_ERR_NOT_FOUND` | No matching record was found. |
+| `CF_ERR_DUPLICATE_ID` | The identifier was already in use. |
+| `CF_ERR_CAPACITY_FULL` | The record table has no room left. |
+| `CF_ERR_FILE_OPEN` | A file could not be opened. |
+| `CF_ERR_FILE_READ` | A file could not be read. |
+| `CF_ERR_FILE_WRITE` | A file could not be written. |
+| `CF_ERR_CORRUPT_FILE` | A file was not in the expected format. |
+| `CF_ERR_INSUFFICIENT_EVIDENCE` | The evidence cannot support a score. |
+| `CF_ERR_INTERNAL` | An unexpected internal error occurred. |
+
+### Enumeration: CaseStatus_t
+
+Purpose: The investigation status of a case.
+
+```
+typedef enum
+{
+    CASE_STATUS_OPEN = 0,
+    CASE_STATUS_UNDER_INVESTIGATION,
+    CASE_STATUS_EVIDENCE_ANALYSIS,
+    CASE_STATUS_CLOSED,
+    CASE_STATUS_ARCHIVED,
+    CASE_STATUS_COUNT
+} CaseStatus_t;
+```
+
+| Enumeration Constant | Meaning |
+| --- | --- |
+| `CASE_STATUS_OPEN` | The case has been registered and nothing has begun. |
+| `CASE_STATUS_UNDER_INVESTIGATION` | The investigation is under way. |
+| `CASE_STATUS_EVIDENCE_ANALYSIS` | The evidence is being examined. |
+| `CASE_STATUS_CLOSED` | The case has been closed. |
+| `CASE_STATUS_ARCHIVED` | The case has been archived. |
+| `CASE_STATUS_COUNT` | The number of statuses; used to check a range. |
+
+### Enumeration: CasePriority_t
+
+Purpose: The priority of a case.
+
+```
+typedef enum
+{
+    CASE_PRIORITY_LOW = 0,
+    CASE_PRIORITY_MEDIUM,
+    CASE_PRIORITY_HIGH,
+    CASE_PRIORITY_CRITICAL,
+    CASE_PRIORITY_COUNT
+} CasePriority_t;
+```
+
+| Enumeration Constant | Meaning |
+| --- | --- |
+| `CASE_PRIORITY_LOW` | Worked when there is time. |
+| `CASE_PRIORITY_MEDIUM` | The normal priority. |
+| `CASE_PRIORITY_HIGH` | Worked before the routine cases. |
+| `CASE_PRIORITY_CRITICAL` | The most urgent priority. |
+| `CASE_PRIORITY_COUNT` | The number of priorities; used to check a range. |
+
+### Enumeration: CrimeType_t
+
+Purpose: The category of crime recorded on a case.
+
+```
+typedef enum
+{
+    CRIME_TYPE_HOMICIDE = 0,
+    CRIME_TYPE_THEFT,
+    CRIME_TYPE_ASSAULT,
+    CRIME_TYPE_FRAUD,
+    CRIME_TYPE_VANDALISM,
+    CRIME_TYPE_CYBERCRIME,
+    CRIME_TYPE_TRAFFIC_FATALITY,
+    CRIME_TYPE_ARSON,
+    CRIME_TYPE_OTHER,
+    CRIME_TYPE_COUNT
+} CrimeType_t;
+```
+
+| Enumeration Constant | Meaning |
+| --- | --- |
+| `CRIME_TYPE_HOMICIDE` | Homicide. |
+| `CRIME_TYPE_THEFT` | Theft. |
+| `CRIME_TYPE_ASSAULT` | Assault. |
+| `CRIME_TYPE_FRAUD` | Fraud. |
+| `CRIME_TYPE_VANDALISM` | Vandalism. |
+| `CRIME_TYPE_CYBERCRIME` | A cybercrime. |
+| `CRIME_TYPE_TRAFFIC_FATALITY` | A fatal traffic incident. |
+| `CRIME_TYPE_ARSON` | Arson. |
+| `CRIME_TYPE_OTHER` | Any crime not covered by the list. |
+| `CRIME_TYPE_COUNT` | The number of crime types; used to check a range. |
+
+### Enumeration: SuspectStatus_t
+
+Purpose: The standing of a suspect within a case.
+
+```
+typedef enum
+{
+    SUSPECT_STATUS_UNDER_REVIEW = 0,
+    SUSPECT_STATUS_PERSON_OF_INTEREST,
+    SUSPECT_STATUS_PRIMARY,
+    SUSPECT_STATUS_RULED_OUT,
+    SUSPECT_STATUS_CONFIRMED,
+    SUSPECT_STATUS_COUNT
+} SuspectStatus_t;
+```
+
+| Enumeration Constant | Meaning |
+| --- | --- |
+| `SUSPECT_STATUS_UNDER_REVIEW` | The suspect is on the register. |
+| `SUSPECT_STATUS_PERSON_OF_INTEREST` | The suspect is being looked at. |
+| `SUSPECT_STATUS_PRIMARY` | The suspect is the main line of enquiry. |
+| `SUSPECT_STATUS_RULED_OUT` | The suspect has been excluded. |
+| `SUSPECT_STATUS_CONFIRMED` | The suspect has been confirmed. |
+| `SUSPECT_STATUS_COUNT` | The number of statuses; used to check a range. |
+
+### Enumeration: EvidenceCategory_t
+
+Purpose: The forensic category of an evidence item.
+
+```
+typedef enum
+{
+    EVIDENCE_CATEGORY_BIOLOGICAL = 0,
+    EVIDENCE_CATEGORY_CHEMICAL,
+    EVIDENCE_CATEGORY_DIGITAL,
+    EVIDENCE_CATEGORY_BALLISTIC,
+    EVIDENCE_CATEGORY_PHYSICAL_TRACE,
+    EVIDENCE_CATEGORY_DOCUMENTARY,
+    EVIDENCE_CATEGORY_VEHICLE,
+    EVIDENCE_CATEGORY_OTHER,
+    EVIDENCE_CATEGORY_COUNT
+} EvidenceCategory_t;
+```
+
+| Enumeration Constant | Meaning |
+| --- | --- |
+| `EVIDENCE_CATEGORY_BIOLOGICAL` | Biological material. |
+| `EVIDENCE_CATEGORY_CHEMICAL` | Chemical material. |
+| `EVIDENCE_CATEGORY_DIGITAL` | A digital device or extract. |
+| `EVIDENCE_CATEGORY_BALLISTIC` | Ballistic material. |
+| `EVIDENCE_CATEGORY_PHYSICAL_TRACE` | A physical trace. |
+| `EVIDENCE_CATEGORY_DOCUMENTARY` | A document. |
+| `EVIDENCE_CATEGORY_VEHICLE` | A vehicle or a part of one. |
+| `EVIDENCE_CATEGORY_OTHER` | Any category not covered by the list. |
+| `EVIDENCE_CATEGORY_COUNT` | The number of categories; used to check a range. |
+
+### Enumeration: EvidenceStatus_t
+
+Purpose: The examination status of an evidence item.
+
+```
+typedef enum
+{
+    EVIDENCE_STATUS_COLLECTED = 0,
+    EVIDENCE_STATUS_IN_TRANSIT,
+    EVIDENCE_STATUS_UNDER_ANALYSIS,
+    EVIDENCE_STATUS_ANALYSED,
+    EVIDENCE_STATUS_REPORTED,
+    EVIDENCE_STATUS_RELEASED,
+    EVIDENCE_STATUS_COUNT
+} EvidenceStatus_t;
+```
+
+| Enumeration Constant | Meaning |
+| --- | --- |
+| `EVIDENCE_STATUS_COLLECTED` | The item has been collected and logged. |
+| `EVIDENCE_STATUS_IN_TRANSIT` | The item is being moved. |
+| `EVIDENCE_STATUS_UNDER_ANALYSIS` | The item is being examined. |
+| `EVIDENCE_STATUS_ANALYSED` | The examination is complete. |
+| `EVIDENCE_STATUS_REPORTED` | The finding has been reported. |
+| `EVIDENCE_STATUS_RELEASED` | The item has been released. |
+| `EVIDENCE_STATUS_COUNT` | The number of statuses; used to check a range. |
+
+### Enumeration: CustodyAction_t
+
+Purpose: The action recorded in a chain-of-custody event.
+
+```
+typedef enum
+{
+    CUSTODY_ACTION_COLLECTED = 0,
+    CUSTODY_ACTION_TRANSFERRED,
+    CUSTODY_ACTION_SEALED,
+    CUSTODY_ACTION_ANALYSED,
+    CUSTODY_ACTION_RELEASED,
+    CUSTODY_ACTION_COUNT
+} CustodyAction_t;
+```
+
+| Enumeration Constant | Meaning |
+| --- | --- |
+| `CUSTODY_ACTION_COLLECTED` | The item was collected from the scene. |
+| `CUSTODY_ACTION_TRANSFERRED` | The item changed hands. |
+| `CUSTODY_ACTION_SEALED` | The item was sealed. |
+| `CUSTODY_ACTION_ANALYSED` | The item was examined. |
+| `CUSTODY_ACTION_RELEASED` | The item was released. |
+| `CUSTODY_ACTION_COUNT` | The number of actions; used to check a range. |
+
+### Enumeration: AttributeKey_t
+
+Purpose: The attributes that can be compared between an evidence item and a suspect profile.
+
+```
+typedef enum
+{
+    ATTRIBUTE_GENDER = 0,
+    ATTRIBUTE_HEIGHT,
+    ATTRIBUTE_HAIR,
+    ATTRIBUTE_SHOE_SIZE,
+    ATTRIBUTE_BLOOD_GROUP,
+    ATTRIBUTE_VEHICLE,
+    ATTRIBUTE_COUNT
+} AttributeKey_t;
+```
+
+| Enumeration Constant | Meaning |
+| --- | --- |
+| `ATTRIBUTE_GENDER` | Compared with the suspect's gender. |
+| `ATTRIBUTE_HEIGHT` | Compared with the suspect's height inside a band. |
+| `ATTRIBUTE_HAIR` | Compared with the suspect's hair colour. |
+| `ATTRIBUTE_SHOE_SIZE` | Compared with the suspect's shoe size inside a band. |
+| `ATTRIBUTE_BLOOD_GROUP` | Compared with the suspect's blood group. |
+| `ATTRIBUTE_VEHICLE` | Compared with the suspect's list of vehicles. |
+| `ATTRIBUTE_COUNT` | The number of keys; used to check a range. |
 
 ## 7.3 Constants
 
-*Pending Phase 2 — capacity limits, string-length limits, ID patterns, score weights, maximum score, file names.*
+| Constant | Value | Purpose |
+| --- | --- | --- |
+| `MAX_CASES` | 100 | Maximum number of cases. |
+| `MAX_SUSPECTS` | 400 | Maximum number of suspects. |
+| `MAX_EVIDENCE` | 400 | Maximum number of evidence items. |
+| `MAX_WITNESSES` | 300 | Maximum number of witnesses. |
+| `MAX_EVIDENCE_ATTRIBUTES` | 6 | Maximum number of attributes per evidence item. |
+| `MAX_CUSTODY_EVENTS` | 12 | Maximum number of custody events per item. |
+| `MAX_MATCH_FACTORS` | 12 | Maximum number of factors recorded per suspect. |
+| `MAX_RANKED_SUSPECTS` | 100 | Maximum number of suspects ranked for one case. |
+| `ID_LENGTH` | 16 | Size of every identifier field. |
+| `TITLE_LENGTH` | 64 | Size of a case title. |
+| `NAME_LENGTH` | 48 | Size of a name field. |
+| `PHONE_LENGTH` | 16 | Size of a phone field. |
+| `ADDRESS_LENGTH` | 80 | Size of an address field. |
+| `TEXT_LENGTH` | 128 | Size of a free-text field. |
+| `LOCATION_LENGTH` | 48 | Size of a location field. |
+| `OFFICER_LENGTH` | 48 | Size of the officer field. |
+| `HANDLER_LENGTH` | 24 | Size of a custody handler field. |
+| `ALIBI_LENGTH` | 80 | Size of the alibi field. |
+| `MOTIVE_LENGTH` | 80 | Size of the motive field. |
+| `EVIDENCE_DESC_LENGTH` | 112 | Size of the evidence description. |
+| `STATEMENT_LENGTH` | 192 | Size of a statement. |
+| `CUSTODY_REMARK_LENGTH` | 64 | Size of a custody remark. |
+| `ATTRIBUTE_VALUE_LENGTH` | 32 | Size of an attribute value. |
+| `VEHICLE_LENGTH` | 16 | Size of a vehicle registration. |
+| `MAX_VEHICLES` | 3 | Maximum number of known vehicles per suspect. |
+| `DATE_LENGTH` | 11 | Size of a date field, `YYYY-MM-DD` plus terminator. |
+| `FILE_LINE_LENGTH` | 512 | Size of the line buffer used when reading a file. |
+| `FILE_PATH_LENGTH` | 256 | Size of a path buffer. |
+| `WEIGHT_GENDER` | 15 | Weight of the gender rule. |
+| `WEIGHT_HEIGHT` | 20 | Weight of the height rule. |
+| `WEIGHT_HAIR` | 10 | Weight of the hair rule. |
+| `WEIGHT_SHOE_SIZE` | 15 | Weight of the shoe-size rule. |
+| `WEIGHT_BLOOD_GROUP` | 20 | Weight of the blood-group rule. |
+| `WEIGHT_VEHICLE` | 25 | Weight of the vehicle rule. |
+| `MAX_SUSPICION_SCORE` | 100 | The cap applied to a score. |
+| `STORAGE_DATA_DIRECTORY` | `"data"` | The directory holding the data files. |
+| `STORAGE_FILE_SIGNATURE` | `"CASEFILE-DATA-V1"` | The signature at the top of every data file. |
+| `STORAGE_FIELD_SEPARATOR` | `'\|'` | The field separator of a stored record. |
+| `STORAGE_FILE_COUNT` | 5 | The number of data files. |
+| `REPORT_OUTPUT_DIRECTORY` | `"reports"` | The directory holding the generated reports. |
 
 ## 7.4 Data Dictionary
 
-*Pending Phase 2 — one row per data item with C type, valid range or size, validation rule and description.*
-
----
+| Data Item | C Type | Valid Range or Size | Validation Rule | Description |
+| --- | --- | --- | --- | --- |
+| Case identifier | `char[16]` | `CF-YYYY-NNNN` | Uppercase letters, digits and hyphens; begins with a letter; not already in use | The unique reference of a case. |
+| Case title | `char[64]` | 1–63 characters | Must not be empty; printable | The short name of the case. |
+| Crime type | `CrimeType_t` | 0–8 | Must be one of the nine defined values | The category of crime. |
+| Priority | `CasePriority_t` | 0–3 | Must be one of the four defined values | How urgently the case is worked. |
+| Investigation status | `CaseStatus_t` | 0–4 | Must be one of the five defined values | Where the investigation has reached. |
+| Incident date | `char[11]` | `YYYY-MM-DD` | Calendar-correct including leap years; year 1900–2200 | When the incident happened. |
+| Location | `char[48]` | 0–47 characters | Printable | Where the incident happened. |
+| Assigned officer | `char[48]` | 0–47 characters | Printable | Who owns the case. |
+| Summary | `char[128]` | 0–127 characters | Printable | The narrative summary. |
+| Suspect identifier | `char[16]` | `SU-NNNNN` | Generated; must not already be in use | The unique reference of a suspect. |
+| Parent case of a suspect | `char[16]` | An existing case identifier | The case must exist | Links the suspect to its case. |
+| Suspect name | `char[48]` | 1–47 characters | Must not be empty | The name of the suspect. |
+| Suspect age | `int` | 1–120 | Must be within the range | The age in years. |
+| Phone number | `char[16]` | 7–15 digits, optional `+` | Digits only after an optional `+` | How to reach the suspect. |
+| Address | `char[80]` | 0–79 characters | Printable | Where the suspect lives. |
+| Alibi | `char[80]` | 0–79 characters | Printable | The stated alibi. |
+| Motive | `char[80]` | 0–79 characters | Printable | The possible motive. |
+| Suspect status | `SuspectStatus_t` | 0–4 | Must be one of the five defined values | The standing of the suspect. |
+| Gender | `char[48]` | 0–47 characters | Printable; may be left unknown | Compared with the `gender` attribute. |
+| Height | `int` | 100–250 cm, or −1 | Must be within the range when known | Compared with the `height` band. |
+| Hair colour | `char[48]` | 0–47 characters | Printable; may be left unknown | Compared with the `hair` attribute. |
+| Shoe size | `int` | 30–52, or −1 | Must be within the range when known | Compared with the `shoe_size` band. |
+| Blood group | `char[48]` | 0–47 characters | Printable; may be left unknown | Compared with the `blood_group` attribute. |
+| Vehicle registrations | `char[3][16]` | Up to 3 entries | Printable; the list may not exceed the capacity | Compared with the `vehicle` attribute. |
+| Evidence identifier | `char[16]` | `EV-NNNNN` | Generated; must not already be in use | The unique reference of an evidence item. |
+| Parent case of evidence | `char[16]` | An existing case identifier | The case must exist | Links the item to its case. |
+| Evidence category | `EvidenceCategory_t` | 0–7 | Must be one of the eight defined values | The forensic category. |
+| Evidence description | `char[112]` | 1–111 characters | Must not be empty | What the item is. |
+| Collection date | `char[11]` | `YYYY-MM-DD` | Calendar-correct | When the item was collected. |
+| Collection location | `char[48]` | 0–47 characters | Printable | Where the item was collected. |
+| Collected by | `char[48]` | 0–47 characters | Printable | Who collected the item. |
+| Examination status | `EvidenceStatus_t` | 0–5 | Must be one of the six defined values | How far the examination has progressed. |
+| Analysis attribute | `Attribute_t` | Up to 6 per item | The key must be one of the six comparable keys; the value must not be empty | A recorded characteristic of the item. |
+| Custody event | `CustodyEvent_t` | Up to 12 per item | The action must be defined; the date valid; both handlers non-empty | One movement of the item. |
+| Witness identifier | `char[16]` | `WI-NNNNN` | Generated; must not already be in use | The unique reference of a witness. |
+| Statement reference | `char[16]` | `ST-NNNNN` | Generated; must not already be in use | The reference of the statement. |
+| Witness name | `char[48]` | 1–47 characters | Must not be empty | The name of the witness. |
+| Statement text | `char[192]` | 1–191 characters | Must not be empty | What the witness said. |
+| Recorded date | `char[11]` | `YYYY-MM-DD` | Calendar-correct | When the statement was taken. |
+| Verified flag | `int` | 0 or 1 | Set to exactly 0 or 1 | Whether the statement has been corroborated. |
+| Suspicion score | `int` | 0–100 | The sum of the matched weights, capped | The decision-support indicator. |
+| Match factor | `MatchFactor_t` | Up to 12 per suspect | The weight is zero when the values do not match | One attribute that was checked. |
 
 # 8. Function Design
 
-> **Status: Pending — to be completed in Phase 2.**
-> Phase 2 will document every important function with prototype, purpose, parameter table, return type, return-value
-> table, preconditions, postconditions, errors handled, related requirements and planned unit tests.
+> **Status: Complete.** Every fallible function follows the same contract: it returns `CfStatus_t`, it validates its
+> arguments before it touches any state, and it changes nothing when it returns an error.
 
-## 8.1 Function: *[Function Name]*
+## 8.1 Function: casefile_createDatabase
 
-*Pending Phase 2 — one subsection per function, in the official structure.*
+Module: Shared data model
 
----
+Prototype:
+
+```
+CasefileDb_t *casefile_createDatabase(void);
+```
+
+Purpose: Create an empty database on the heap.
+
+Parameters: none.
+
+Return type: `CasefileDb_t *`
+
+Return values:
+
+| Return Value | Meaning |
+| --- | --- |
+| A pointer to the new database | The database was created. |
+| `NULL` | The allocation failed. |
+
+Preconditions: none.
+
+Postconditions: the returned database holds zero records and every counter is zero.
+
+Errors handled: the allocation failure is reported to the caller, which stops the application with a message rather
+than dereferencing a `NULL` pointer.
+
+Related requirements: FR-01, NFR-03
+
+Planned unit tests: exercised by every fixture in `test_records.cpp`, `test_analysis.cpp` and `test_storage.cpp`.
+
+## 8.2 Function: validationReadLine
+
+Module: Validation
+
+Prototype:
+
+```
+CfStatus_t validationReadLine(const char *prompt, char *buffer, size_t bufferSize);
+```
+
+Purpose: Read one line of text from standard input into a bounded buffer.
+
+Parameters:
+
+| Parameter | C Type | Direction | Description | Valid Values |
+| --- | --- | --- | --- | --- |
+| `prompt` | `const char *` | Input | Text shown before reading; `NULL` reads without a prompt | Any string or `NULL` |
+| `buffer` | `char *` | Output | The destination buffer | Must not be `NULL` |
+| `bufferSize` | `size_t` | Input | The size of the destination buffer | Greater than zero |
+
+Return type: `CfStatus_t`
+
+Return values:
+
+| Return Value | Meaning |
+| --- | --- |
+| `CF_SUCCESS` | A line was read and the buffer is NUL-terminated. |
+| `CF_ERR_INVALID_ARGUMENT` | The buffer was `NULL` or the size was zero. |
+| `CF_ERR_FILE_READ` | Standard input could not be read. |
+
+Preconditions: standard input is open.
+
+Postconditions: the buffer holds one line of text without its newline; any remainder of an over-long line has been
+discarded from the input stream.
+
+Errors handled: a null buffer, a zero size and a failed read.
+
+Related requirements: FR-04, NFR-03, NFR-05
+
+Planned unit tests: `LineReadingTest.EachReadConsumesExactlyOneLine`,
+`LineReadingTest.OverlongLineIsTruncatedAndItsRemainderIsDiscarded`,
+`LineReadingTest.CarriageReturnIsRemoved`, `LineReadingTest.NullBufferIsRejected`.
+
+## 8.3 Function: validationCopyField
+
+Module: Validation
+
+Prototype:
+
+```
+void validationCopyField(char *destination, size_t destinationSize, const char *source);
+```
+
+Purpose: Copy a value into a fixed-size field, truncating it safely.
+
+Parameters:
+
+| Parameter | C Type | Direction | Description | Valid Values |
+| --- | --- | --- | --- | --- |
+| `destination` | `char *` | Output | The destination buffer | Must not be `NULL` |
+| `destinationSize` | `size_t` | Input | The size of the destination buffer | Greater than zero |
+| `source` | `const char *` | Input | The value to copy; `NULL` empties the destination | Any string or `NULL` |
+
+Return type: `void`
+
+Return values: none; the function always leaves a NUL-terminated field.
+
+Preconditions: none.
+
+Postconditions: the destination holds the source truncated to `destinationSize - 1` characters; copying a field onto
+itself leaves its content unchanged.
+
+Errors handled: a null destination, a zero size and a null source.
+
+Related requirements: FR-01, FR-46, NFR-03
+
+Planned unit tests: `ValidationCopyFieldTest.TruncatesOverlongSourceSafely`,
+`ValidationCopyFieldTest.CopiesExactFitWithTerminator`,
+`ValidationCopyFieldTest.NullSourceProducesEmptyDestination`,
+`ValidationCopyFieldTest.CopyingAFieldOntoItselfPreservesTheContent`.
+
+## 8.4 Function: validationParseInt
+
+Module: Validation
+
+Prototype:
+
+```
+CfStatus_t validationParseInt(const char *text, int *result);
+```
+
+Purpose: Parse a string as a base-10 integer, rejecting anything that is not entirely a number.
+
+Parameters:
+
+| Parameter | C Type | Direction | Description | Valid Values |
+| --- | --- | --- | --- | --- |
+| `text` | `const char *` | Input | The string to parse | Must not be `NULL` |
+| `result` | `int *` | Output | Receives the parsed value | Must not be `NULL` |
+
+Return type: `CfStatus_t`
+
+Return values:
+
+| Return Value | Meaning |
+| --- | --- |
+| `CF_SUCCESS` | The whole string was a valid integer. |
+| `CF_ERR_INVALID_ARGUMENT` | A pointer argument was `NULL`. |
+| `CF_ERR_INVALID_FORMAT` | The string was not a valid integer, including trailing text. |
+
+Preconditions: none.
+
+Postconditions: on success `*result` holds the parsed value; on failure `*result` is unchanged.
+
+Errors handled: a null pointer, an empty string, a non-digit character and a value beyond the range of an `int`.
+
+Related requirements: FR-03, NFR-03
+
+Planned unit tests: the eight cases of `ValidationParseIntTest`.
+
+## 8.5 Function: validationIsValidDate
+
+Module: Validation
+
+Prototype:
+
+```
+int validationIsValidDate(const char *text);
+```
+
+Purpose: Determine whether a string is a real calendar date in `YYYY-MM-DD` form.
+
+Parameters:
+
+| Parameter | C Type | Direction | Description | Valid Values |
+| --- | --- | --- | --- | --- |
+| `text` | `const char *` | Input | The date to test | Must not be `NULL` |
+
+Return type: `int`
+
+Return values:
+
+| Return Value | Meaning |
+| --- | --- |
+| `1` | The date exists on the calendar. |
+| `0` | The date does not exist, or the format is wrong. |
+
+Preconditions: none.
+
+Postconditions: none; the function has no side effects.
+
+Errors handled: a null pointer, a wrong length, a wrong separator, an impossible month or day and the leap-year rule.
+
+Related requirements: FR-01, FR-07, FR-11, FR-17, FR-26, NFR-03
+
+Planned unit tests: the twelve cases of `ValidationIsValidDateTest`.
+
+## 8.6 Function: caseManager_addCase
+
+Module: Case manager
+
+Prototype:
+
+```
+CfStatus_t caseManager_addCase(CasefileDb_t *db, Case_t *caseData);
+```
+
+Purpose: Register a new case with an auto-generated unique identifier.
+
+Parameters:
+
+| Parameter | C Type | Direction | Description | Valid Values |
+| --- | --- | --- | --- | --- |
+| `db` | `CasefileDb_t *` | Input-Output | The database to modify | Must not be `NULL` |
+| `caseData` | `Case_t *` | Input-Output | The case to store; the identifier field is overwritten | Must not be `NULL` |
+
+Return type: `CfStatus_t`
+
+Return values:
+
+| Return Value | Meaning |
+| --- | --- |
+| `CF_SUCCESS` | The case was stored and `caseData->caseId` holds the generated identifier. |
+| `CF_ERR_NULL_POINTER` | A pointer argument was `NULL`. |
+| `CF_ERR_CAPACITY_FULL` | The case register is full. |
+| `CF_ERR_EMPTY_INPUT` | The title was empty. |
+| `CF_ERR_INVALID_LENGTH` | The title was too long. |
+| `CF_ERR_INVALID_DATE` | The incident date was not a real date. |
+| `CF_ERR_INVALID_ENUM` | The crime type, priority or status was out of range. |
+
+Preconditions: the database has room for one more case.
+
+Postconditions: on success the register holds one more case and the identifier is unique; on failure nothing changes.
+
+Errors handled: as listed above.
+
+Related requirements: FR-01, FR-02, FR-46
+
+Planned unit tests: `RecordTest.AddCaseStoresRecordAndGeneratesIdentifier`,
+`RecordTest.GeneratedIdentifiersAreUniqueAcrossCases`, `RecordTest.AddCaseRejectsEmptyTitle`,
+`RecordTest.AddCaseRejectsInvalidDate`, `RecordTest.AddCaseRejectsInvalidCrimeType`,
+`RecordTest.AddCaseRejectsNullDatabase`, `RecordTest.AddCaseReportsCapacityReachedAtLimit`.
+
+## 8.7 Function: caseManager_delete
+
+Module: Case manager
+
+Prototype:
+
+```
+CfStatus_t caseManager_delete(CasefileDb_t *db, const char *caseId);
+```
+
+Purpose: Delete a case and every record that belongs to it.
+
+Parameters:
+
+| Parameter | C Type | Direction | Description | Valid Values |
+| --- | --- | --- | --- | --- |
+| `db` | `CasefileDb_t *` | Input-Output | The database to modify | Must not be `NULL` |
+| `caseId` | `const char *` | Input | The identifier of the case to delete | Must not be `NULL` |
+
+Return type: `CfStatus_t`
+
+Return values:
+
+| Return Value | Meaning |
+| --- | --- |
+| `CF_SUCCESS` | The case and its child records were removed. |
+| `CF_ERR_NULL_POINTER` | A pointer argument was `NULL`. |
+| `CF_ERR_NOT_FOUND` | No case has that identifier. |
+
+Preconditions: the case exists.
+
+Postconditions: the case and every suspect, evidence item and witness that referenced it are gone; no record is left
+pointing at a case that no longer exists.
+
+Errors handled: a null pointer and an unknown identifier.
+
+Related requirements: FR-08
+
+Planned unit tests: `RecordTest.DeleteRemovesCaseAndItsLinkedRecords`,
+`RecordTest.DeleteReportsNotFoundForUnknownIdentifier`.
+
+## 8.8 Function: evidenceManager_addCustodyEvent
+
+Module: Evidence manager
+
+Prototype:
+
+```
+CfStatus_t evidenceManager_addCustodyEvent(CasefileDb_t *db, const char *evidenceId,
+                                            const CustodyEvent_t *event);
+```
+
+Purpose: Append a chain-of-custody event to an evidence item.
+
+Parameters:
+
+| Parameter | C Type | Direction | Description | Valid Values |
+| --- | --- | --- | --- | --- |
+| `db` | `CasefileDb_t *` | Input-Output | The database to modify | Must not be `NULL` |
+| `evidenceId` | `const char *` | Input | The item to append to | Must not be `NULL` |
+| `event` | `const CustodyEvent_t *` | Input | The event to append | Must not be `NULL` |
+
+Return type: `CfStatus_t`
+
+Return values:
+
+| Return Value | Meaning |
+| --- | --- |
+| `CF_SUCCESS` | The event was appended at the end of the log. |
+| `CF_ERR_NULL_POINTER` | A pointer argument was `NULL`. |
+| `CF_ERR_INVALID_ENUM` | The action was out of range. |
+| `CF_ERR_EMPTY_INPUT` | A handler was empty. |
+| `CF_ERR_INVALID_DATE` | The timestamp was not a real date. |
+| `CF_ERR_NOT_FOUND` | No evidence item has that identifier. |
+| `CF_ERR_CAPACITY_FULL` | The custody log of that item is full. |
+
+Preconditions: the evidence item exists and its custody log has room.
+
+Postconditions: on success the log holds one more event, in order; on failure nothing changes.
+
+Errors handled: as listed above.
+
+Related requirements: FR-22, FR-24
+
+Planned unit tests: `RecordTest.CustodyEventsAreAppendedInOrder`,
+`RecordTest.CustodyEventRejectsInvalidDate`, `RecordTest.CustodyEventReportsNotFoundForUnknownEvidence`,
+`RecordTest.CustodyEventRejectsEmptyHandlers`, `RecordTest.CustodyLogReportsCapacityReachedAtLimit`.
+
+## 8.9 Function: investigation_compareAttribute
+
+Module: Investigation
+
+Prototype:
+
+```
+int investigation_compareAttribute(AttributeKey_t key, const char *evidenceValue,
+                                   const char *suspectValue, int *matched);
+```
+
+Purpose: Apply one comparison rule in isolation.
+
+Parameters:
+
+| Parameter | C Type | Direction | Description | Valid Values |
+| --- | --- | --- | --- | --- |
+| `key` | `AttributeKey_t` | Input | Which rule to apply | 0–5 |
+| `evidenceValue` | `const char *` | Input | The value recorded against the evidence | Must not be `NULL` |
+| `suspectValue` | `const char *` | Input | The value recorded against the suspect | Must not be `NULL` |
+| `matched` | `int *` | Output | Receives 1 when the values coincide | Must not be `NULL` |
+
+Return type: `int`
+
+Return values:
+
+| Return Value | Meaning |
+| --- | --- |
+| The weight of the rule, 10 to 25 | The values coincide. |
+| `0` | The values do not coincide, or cannot be compared. |
+
+Preconditions: none.
+
+Postconditions: `*matched` is set to 1 only when the function returns a non-zero weight.
+
+Errors handled: a null pointer, a null value and an unknown key.
+
+Related requirements: FR-31, FR-33
+
+Planned unit tests: the thirteen cases of `InvestigationCompareTest`.
+
+## 8.10 Function: investigation_analyseCase
+
+Module: Investigation
+
+Prototype:
+
+```
+CfStatus_t investigation_analyseCase(const CasefileDb_t *db, const char *caseId,
+                                      AnalysisResult_t *result);
+```
+
+Purpose: Score every suspect of a case against its evidence and rank the results.
+
+Parameters:
+
+| Parameter | C Type | Direction | Description | Valid Values |
+| --- | --- | --- | --- | --- |
+| `db` | `const CasefileDb_t *` | Input | The database to read | Must not be `NULL` |
+| `caseId` | `const char *` | Input | The case to analyse | Must not be `NULL` |
+| `result` | `AnalysisResult_t *` | Output | Receives the scores and the factors | Must not be `NULL` |
+
+Return type: `CfStatus_t`
+
+Return values:
+
+| Return Value | Meaning |
+| --- | --- |
+| `CF_SUCCESS` | The case was analysed and the suspects are ranked by descending score. |
+| `CF_ERR_NULL_POINTER` | A pointer argument was `NULL`. |
+| `CF_ERR_NOT_FOUND` | No case has that identifier. |
+| `CF_ERR_INSUFFICIENT_EVIDENCE` | The case has no suspects or no comparable evidence, so no score can be produced. |
+
+Preconditions: the case exists and the result buffer is large enough.
+
+Postconditions: on success the result holds the score of every suspect, the factors that were checked and the
+comparable-evidence count, sorted by descending score; on failure the result is empty.
+
+Errors handled: as listed above.
+
+Related requirements: FR-31, FR-32, FR-33, FR-34
+
+Planned unit tests: the thirteen cases of `AnalysisTest`.
+
+## 8.11 Function: investigation_computeProgress
+
+Module: Investigation
+
+Prototype:
+
+```
+CfStatus_t investigation_computeProgress(const CasefileDb_t *db, const char *caseId,
+                                         int *percent, char *detail, size_t detailSize);
+```
+
+Purpose: Derive the investigation progress of a case from the real record counts.
+
+Parameters:
+
+| Parameter | C Type | Direction | Description | Valid Values |
+| --- | --- | --- | --- | --- |
+| `db` | `const CasefileDb_t *` | Input | The database to read | Must not be `NULL` |
+| `caseId` | `const char *` | Input | The case to measure | Must not be `NULL` |
+| `percent` | `int *` | Output | Receives the progress from 0 to 100 | Must not be `NULL` |
+| `detail` | `char *` | Output | Receives a short breakdown; may be `NULL` | At least `TEXT_LENGTH` bytes |
+| `detailSize` | `size_t` | Input | The size of the detail buffer | Any value when `detail` is `NULL` |
+
+Return type: `CfStatus_t`
+
+Return values:
+
+| Return Value | Meaning |
+| --- | --- |
+| `CF_SUCCESS` | The progress was computed. |
+| `CF_ERR_NULL_POINTER` | A required pointer argument was `NULL`. |
+| `CF_ERR_NOT_FOUND` | No case has that identifier. |
+
+Preconditions: the case exists.
+
+Postconditions: `*percent` holds a value from 0 to 100.
+
+Errors handled: as listed above.
+
+Related requirements: FR-35
+
+Planned unit tests: `AnalysisTest.ProgressReflectsAnalysedEvidenceAndVerifiedStatements`,
+`AnalysisTest.ProgressForUnknownCaseReportsNotFound`.
+
+## 8.12 Function: report_generateCaseSummary
+
+Module: Report generator
+
+Prototype:
+
+```
+CfStatus_t report_generateCaseSummary(const CasefileDb_t *db, const char *caseId,
+                                      char *buffer, size_t bufferSize);
+```
+
+Purpose: Build the investigation summary report for a case.
+
+Parameters:
+
+| Parameter | C Type | Direction | Description | Valid Values |
+| --- | --- | --- | --- | --- |
+| `db` | `const CasefileDb_t *` | Input | The database to read | Must not be `NULL` |
+| `caseId` | `const char *` | Input | The case to report on | Must not be `NULL` |
+| `buffer` | `char *` | Output | Receives the report | Must not be `NULL` |
+| `bufferSize` | `size_t` | Input | The size of the buffer | Greater than zero |
+
+Return type: `CfStatus_t`
+
+Return values:
+
+| Return Value | Meaning |
+| --- | --- |
+| `CF_SUCCESS` | The report was written into the buffer. |
+| `CF_ERR_NULL_POINTER` | A pointer argument was `NULL`. |
+| `CF_ERR_INVALID_ARGUMENT` | The buffer size was zero. |
+| `CF_ERR_NOT_FOUND` | No case has that identifier. |
+| `CF_ERR_INSUFFICIENT_EVIDENCE` | The report was produced, but the analysis could not be run. |
+
+Preconditions: the case exists.
+
+Postconditions: the buffer holds a NUL-terminated report; if the buffer is too small the report is truncated rather
+than allowed to overflow.
+
+Errors handled: as listed above.
+
+Related requirements: FR-37, FR-40
+
+Planned unit tests: `ReportTest.CaseSummaryContainsTheKeyInformation`,
+`ReportTest.CaseSummaryForUnknownCaseReportsNotFound`, `ReportTest.CaseSummaryRejectsNullArguments`,
+`ReportTest.SmallBufferDoesNotOverflow`.
+
+## 8.13 Function: storage_saveAll
+
+Module: Storage
+
+Prototype:
+
+```
+CfStatus_t storage_saveAll(const CasefileDb_t *db);
+```
+
+Purpose: Write every record in the database to the data directory.
+
+Parameters:
+
+| Parameter | C Type | Direction | Description | Valid Values |
+| --- | --- | --- | --- | --- |
+| `db` | `const CasefileDb_t *` | Input | The database to save | Must not be `NULL` |
+
+Return type: `CfStatus_t`
+
+Return values:
+
+| Return Value | Meaning |
+| --- | --- |
+| `CF_SUCCESS` | Every file was written. |
+| `CF_ERR_NULL_POINTER` | The database pointer was `NULL`. |
+| `CF_ERR_FILE_OPEN` | A file could not be opened for writing. |
+| `CF_ERR_FILE_WRITE` | A write or a close failed. |
+
+Preconditions: the data directory can be created or already exists.
+
+Postconditions: the five data files hold every record and each begins with the format signature.
+
+Errors handled: as listed above.
+
+Related requirements: FR-41, FR-43, FR-46
+
+Planned unit tests: the storage suites in `test_storage.cpp`.
+
+## 8.14 Function: storage_loadAll
+
+Module: Storage
+
+Prototype:
+
+```
+CfStatus_t storage_loadAll(CasefileDb_t *db);
+```
+
+Purpose: Read every record from the data directory into the database.
+
+Parameters:
+
+| Parameter | C Type | Direction | Description | Valid Values |
+| --- | --- | --- | --- | --- |
+| `db` | `CasefileDb_t *` | Input-Output | The database to fill | Must not be `NULL` |
+
+Return type: `CfStatus_t`
+
+Return values:
+
+| Return Value | Meaning |
+| --- | --- |
+| `CF_SUCCESS` | Every file was read, or the file did not exist. |
+| `CF_ERR_NULL_POINTER` | The database pointer was `NULL`. |
+| `CF_ERR_CORRUPT_FILE` | A file was not in the expected format. |
+| `CF_ERR_FILE_OPEN` | A file could not be opened for reading. |
+| `CF_ERR_CAPACITY_FULL` | The file holds more records than the register can take. |
+
+Preconditions: the database is empty; the function clears it before it starts.
+
+Postconditions: on success the database holds every record that was stored; on failure the application continues
+with an empty case file.
+
+Errors handled: as listed above.
+
+Related requirements: FR-42, FR-44, FR-45
+
+Planned unit tests: the storage suites in `test_storage.cpp`.
+
+## 8.15 Function: storage_validateFormat
+
+Module: Storage
+
+Prototype:
+
+```
+CfStatus_t storage_validateFormat(const char *path);
+```
+
+Purpose: Check that a file carries the expected format signature.
+
+Parameters:
+
+| Parameter | C Type | Direction | Description | Valid Values |
+| --- | --- | --- | --- | --- |
+| `path` | `const char *` | Input | The file to check | Must not be `NULL` |
+
+Return type: `CfStatus_t`
+
+Return values:
+
+| Return Value | Meaning |
+| --- | --- |
+| `CF_SUCCESS` | The file carries the expected signature. |
+| `CF_ERR_NULL_POINTER` | The path was `NULL`. |
+| `CF_ERR_FILE_OPEN` | The file could not be opened. |
+| `CF_ERR_CORRUPT_FILE` | The file is empty or carries a foreign signature. |
+
+Preconditions: none.
+
+Postconditions: none; the function only reads.
+
+Errors handled: as listed above.
+
+Related requirements: FR-44, FR-45
+
+Planned unit tests: `StorageFormatTest.ValidSignatureIsAccepted`,
+`StorageFormatTest.ForeignSignatureIsRejected`, `StorageFormatTest.EmptyFileIsRejected`,
+`StorageFormatTest.MissingFileIsReportedAsUnreadable`, `StorageFormatTest.NullPathIsRejected`.
 
 # 9. Input-Validation Plan
 
-> **Status: Pending — to be completed in Phase 2.**
-> Planned coverage, based on the validation module's responsibilities: integer values, dates, text fields,
-> identifiers, enumerated choices, empty input, duplicate records, minimum and maximum values, maximum string
-> lengths, unsupported menu choices, and invalid file data.
+| Input | Source | Validation Rule | Invalid Example | Expected Error Behaviour |
+| --- | --- | --- | --- | --- |
+| Menu selection | User | An integer within the range of the menu | `99`, `abc`, empty | `! Value 99 is out of range. Enter a number between 0 and 8.` then the menu is shown again |
+| Case identifier | User | Uppercase letters, digits and hyphens; begins with a letter; at most 15 characters | `cf-2026-1`, `1CF`, empty | `! 'cf-2026-1' is not a valid identifier...` |
+| Title | User | Not empty; at most 63 characters | empty | `! A value is required. Input cannot be left empty.` |
+| Crime type | User | One of the nine defined names, ignoring case | `piracy` | `! The value entered is not one of the permitted choices.` |
+| Priority | User | One of the four defined names | `urgent` | The same message as above |
+| Investigation status | User | One of the five defined names | `solved` | The same message as above |
+| Incident date | User | `YYYY-MM-DD`, calendar-correct including leap years | `2026-02-30`, `2026-13-01`, `2026/01/14` | `! The date is not valid. Use the YYYY-MM-DD format.` |
+| Suspect name | User | Not empty; at most 47 characters | empty | `! A value is required. Input cannot be left empty.` |
+| Age | User | An integer from 1 to 120 | `0`, `500`, `thirty` | `! Value 0 is out of range...` or `! 'thirty' is not a valid whole number.` |
+| Phone | User | 7 to 15 digits after an optional `+` | `12345`, `98200ABCDE` | Rejected with the format message |
+| Height | User | 100 to 250 cm, or left empty | `20`, `tall` | `! 'tall' is not a valid whole number.` |
+| Shoe size | User | 30 to 52, or left empty | `5` | `! Value 5 is out of range...` |
+| Blood group | User | Printable; may be left empty | — | Accepted as unknown |
+| Evidence category | User | One of the eight defined names | `unknown` | `! The value entered is not one of the permitted choices.` |
+| Evidence description | User | Not empty; at most 111 characters | empty | `! A value is required...` |
+| Attribute key | User | One of the six comparable keys | `favourite_colour` | The same message as above |
+| Attribute value | User | Not empty; at most 31 characters | empty | `! A value is required...` |
+| Custody action | User | One of the five defined names | `lost` | The enumeration message |
+| Custody handlers | User | Both not empty | empty | `! A value is required...` |
+| Custody date | User | `YYYY-MM-DD`, calendar-correct | `2026-13-01` | `! The date is not valid...` |
+| Statement text | User | Not empty; at most 191 characters | empty | `! A value is required...` |
+| Confirmation | User | `y`, `yes`, `n` or `no`, ignoring case | `maybe` | Treated as "no"; the deletion is cancelled |
+| A record that does not exist | User | The identifier must be in the register | `CF-2026-9999` | `! No matching record was found.` |
+| A duplicate identifier | Generated | The sequence never produces a value already in use | — | `! That identifier is already in use.` |
+| A full record table | Internal | The count must be below the capacity | — | `! The maximum number of records has been reached.` |
+| A null pointer argument | Internal | Every pointer argument is checked | — | `CF_ERR_NULL_POINTER` |
+| A file with a foreign signature | File | The first line must be `CASEFILE-DATA-V1` | `SOMETHING-ELSE-V9` | `! The data file contains content in an unrecognised format.` |
+| An empty file | File | The signature line must be present | empty | The same corrupt-file message |
+| A missing file | File | Not an error; the application starts empty | — | `No stored data was found. Starting with an empty case file.` |
+| A file that cannot be opened | File | `fopen` must succeed | unreadable permissions | `! The data file could not be opened.` |
 
----
+**Common validation strategy.** Every value read from the user passes through `validationReadLine`, which reads into a
+bounded buffer, discards any over-long remainder of the line and strips the newline. The value is then trimmed and
+passed to the specific check that belongs to the field. No unsafe input function is used anywhere in the project:
+`gets` is never called, and `scanf` is never used to read text.
+
+Two principles run through the whole plan:
+
+- **Validate before you store.** Every field is checked before the record is written, so an invalid value can never
+  reach the database or the data files.
+- **Reject clearly, continue safely.** A rejected value produces a message that names the problem and the permitted
+  range, and the prompt is repeated. The program is never left in an inconsistent state and never terminates because
+  of bad input.
 
 # 10. File-Handling Design
 
-> **Status: Pending — to be completed in Phase 2.**
-> Planned files: `data/cases.txt`, `data/suspects.txt`, `data/evidence.txt`, `data/custody.txt`, `data/witnesses.txt`.
-> The format will be a line-oriented, delimiter-separated text format with a format-signature header line so that
-> corrupted or foreign files can be detected on load.
-
 ## 10.1 File Summary
 
-*Pending Phase 2.*
+| File | Purpose | Format | Created By | Read By | Updated By |
+| --- | --- | --- | --- | --- | --- |
+| `data/cases.txt` | The case register | Text, `\|` separated | `storage_saveAll` | `storage_loadAll` | `storage_saveAll` |
+| `data/suspects.txt` | The suspect register | Text, `\|` separated | `storage_saveAll` | `storage_loadAll` | `storage_saveAll` |
+| `data/evidence.txt` | The evidence register and its analysis attributes | Text, `\|` separated | `storage_saveAll` | `storage_loadAll` | `storage_saveAll` |
+| `data/custody.txt` | The chain-of-custody log of every item | Text, `\|` separated | `storage_saveAll` | `storage_loadAll` | `storage_saveAll` |
+| `data/witnesses.txt` | The witness register | Text, `\|` separated | `storage_saveAll` | `storage_loadAll` | `storage_saveAll` |
+| `reports/<case>_<kind>.txt` | A generated report | Text | `report_saveToFile` | Read by the user | `report_saveToFile` |
 
 ## 10.2 Record Format
 
-*Pending Phase 2.*
+Every file begins with the signature line `CASEFILE-DATA-V1`. Each following line is one record whose fields are
+separated by `|`.
+
+```
+cases.txt      CF-2026-0001|Warehouse Break-in|1|2|0|2026-01-14|Sector 9|Insp. Kadam|Summary
+suspects.txt   SU-00001|CF-2026-0001|Ravi Deshmukh|34|9820041155|Addr|Alibi|Motive|0|male|178|black|42|O+|vehicles
+evidence.txt   EV-00001|CF-2026-0001|4|Fibre strand|2026-01-14|Sector 9|C. Naik|0|1|2=black;4=170-185
+custody.txt    EV-00001|1|2026-01-15|C. Naik|Evidence Store|Locker L-14|Remarks
+witnesses.txt  WI-00001|CF-2026-0001|ST-00001|Meera Kulkarni|9820041177|Statement text|2026-01-16|1
+```
+
+The numeric fields hold the enumeration values, so a record stays compact and unambiguous. A field that would
+contain the separator or a newline has it replaced with a space by `storage_sanitizeField` before the record is
+written, so a record can never span more than one line and the reader never has to handle a continuation.
 
 ## 10.3 File Operations
 
-*Pending Phase 2 — creation/open, read, write, update and close operations with their C library functions and
-failure handling.*
+| Operation | Function or Module | C Library Function | Failure Handling |
+| --- | --- | --- | --- |
+| Create or open | `storage` — `openForWrite` | `fopen(path, "w")` | `CF_ERR_FILE_OPEN`; the signature line is written with a checked `fputs`. |
+| Read | `storage` — `openForRead` | `fopen(path, "r")` | A missing file sets the "missing" flag and is not an error; a foreign signature gives `CF_ERR_CORRUPT_FILE`. |
+| Read a record | `storage` — `loadCases` and the other loaders | `fgets` | The line is checked; a record with too few fields, an impossible date or an out-of-range enumeration gives `CF_ERR_CORRUPT_FILE`. |
+| Write a record | `storage` — `saveCases` and the other savers | `fprintf` and `fputs` | The return value is checked; a failure gives `CF_ERR_FILE_WRITE`. |
+| Update | `storage` — `storage_saveAll` | `fopen(path, "w")` rewrites the whole file | The whole file is rewritten, so a file is never left half updated. |
+| Close | every writer | `fclose` | The return value of `fclose` is checked in `report_saveToFile`. |
+
+Every `fopen`, `fgets`, `fprintf`, `fputs` and `fclose` call in the project has its return value checked, which
+satisfies the requirement that no file operation may be ignored.
 
 ## 10.4 File Error Conditions
 
-*Pending Phase 2 — file missing, cannot be opened, empty, invalid content, read/write failure.*
-
----
+| Error Condition | Detection Method | Expected Behaviour |
+| --- | --- | --- |
+| File does not exist | `fopen` returns `NULL` | The application starts with an empty case file and says so: `No stored data was found.` |
+| File cannot be opened | `fopen` returns `NULL` for another reason | `CF_ERR_FILE_OPEN`; the user is told that the file could not be read. |
+| File is empty | `fgets` returns `NULL` on the first line | `CF_ERR_CORRUPT_FILE`; the file is not loaded. |
+| File contains invalid data | The signature does not match, or a record has too few fields, or a date or enumeration value is out of range | `CF_ERR_CORRUPT_FILE`; the file is not loaded and the application continues with the remaining data. |
+| Read or write fails | The return value of `fgets`, `fputs` or `fclose` | `CF_ERR_FILE_READ` or `CF_ERR_FILE_WRITE`; the application reports the failure and does not claim success. |
 
 # 11. Error-Handling Strategy
 
-> **Status: Pending — to be completed in Phase 2.**
-> Built on the `CfStatus_t` enumeration planned in §7.2. Phase 2 will add the error catalogue with detection
-> location, returned status and user-facing behaviour, plus the recovery strategy.
-
 ## 11.1 Status Representation
 
-*Pending Phase 2 — the `CfStatus_t` enumeration will be specified in full.*
+```
+typedef enum
+{
+    CF_SUCCESS = 0,
+    CF_ERR_NULL_POINTER,
+    CF_ERR_INVALID_ARGUMENT,
+    CF_ERR_INVALID_FORMAT,
+    CF_ERR_INVALID_DATE,
+    CF_ERR_INVALID_ENUM,
+    CF_ERR_INVALID_LENGTH,
+    CF_ERR_EMPTY_INPUT,
+    CF_ERR_NOT_FOUND,
+    CF_ERR_DUPLICATE_ID,
+    CF_ERR_CAPACITY_FULL,
+    CF_ERR_FILE_OPEN,
+    CF_ERR_FILE_READ,
+    CF_ERR_FILE_WRITE,
+    CF_ERR_CORRUPT_FILE,
+    CF_ERR_INSUFFICIENT_EVIDENCE,
+    CF_ERR_INTERNAL
+} CfStatus_t;
+```
 
 ## 11.2 Error Catalogue
 
-*Pending Phase 2.*
+| Error ID | Error Condition | Detection Location | Returned Status | User-Facing Behaviour |
+| --- | --- | --- | --- | --- |
+| ERR-01 | A required pointer argument is `NULL` | The first statement of the function | `CF_ERR_NULL_POINTER` | `Internal error: a required pointer was NULL.` |
+| ERR-02 | An argument is outside its permitted range | The validation of the argument | `CF_ERR_INVALID_ARGUMENT` | `Invalid argument supplied to the function.` |
+| ERR-03 | A string is not in the expected format | `validationParseInt`, `validationIsValidIdentifier` | `CF_ERR_INVALID_FORMAT` | `The value entered is not in the expected format.` |
+| ERR-04 | A date is impossible | `validationIsValidDate` | `CF_ERR_INVALID_DATE` | `The date is not valid. Use the YYYY-MM-DD format.` |
+| ERR-05 | A value is not one of the permitted choices | `validationParse*` | `CF_ERR_INVALID_ENUM` | `The value entered is not one of the permitted choices.` |
+| ERR-06 | A string is too long for its field | `validationCheckLength` | `CF_ERR_INVALID_LENGTH` | `The text entered is too long.` |
+| ERR-07 | A required value was left empty | `validationIsNotEmpty` | `CF_ERR_EMPTY_INPUT` | `A value is required. Input cannot be left empty.` |
+| ERR-08 | The record does not exist | The `findById` of the owning module | `CF_ERR_NOT_FOUND` | `No matching record was found.` |
+| ERR-09 | The identifier is already in use | The `*IdExists` helpers | `CF_ERR_DUPLICATE_ID` | `That identifier is already in use.` |
+| ERR-10 | The record table is full | The capacity check before an insertion | `CF_ERR_CAPACITY_FULL` | `The maximum number of records has been reached.` |
+| ERR-11 | A file cannot be opened | `fopen` | `CF_ERR_FILE_OPEN` | `The data file could not be opened.` |
+| ERR-12 | A file cannot be read | `fgets` | `CF_ERR_FILE_READ` | `The data file could not be read.` |
+| ERR-13 | A file cannot be written | `fputs`, `fprintf`, `fclose` | `CF_ERR_FILE_WRITE` | `The data file could not be written.` |
+| ERR-14 | A file is not in the expected format | The signature check and the record checks | `CF_ERR_CORRUPT_FILE` | `The data file contains content in an unrecognised format.` |
+| ERR-15 | The evidence cannot support a score | `investigation_analyseCase` | `CF_ERR_INSUFFICIENT_EVIDENCE` | `Insufficient evidence: the recorded evidence cannot support a score.` |
 
 ## 11.3 Recovery Strategy
 
-*Pending Phase 2.*
-
----
+- **Invalid input never terminates the program.** The message is printed and the prompt repeats. The integer reader
+  gives up after five attempts and falls back to the smallest permitted value, so the application always continues
+  and never leaves the user at a prompt that cannot be answered.
+- **A failed load is survivable.** A missing or corrupt file produces a warning and an empty but fully usable
+  session; the user can still inspect the file status from the main menu and rebuild the register.
+- **A failed save is reported loudly.** The exit path prints the error and states explicitly that the changes were
+  **not** saved, and the process returns a failure exit code so that a script can detect it.
+- **A failed allocation is reported.** `casefile_createDatabase()` returns `NULL` and the application stops with a
+  clear message rather than dereferencing it.
+- **A destructive action is confirmed.** A deletion always asks for confirmation, and it first reports how many
+  child records will be removed with it.
+- **A module that fails changes nothing.** Every manager validates before it writes, so a rejected operation cannot
+  leave a record half updated.
 
 # 12. Coding Standards Plan
 
-> **Status: Pending — to be completed in Phase 2.**
-> The standards applied throughout are already fixed by the guidelines and the project brief: four-space
-> indentation, uppercase constant names, header guards, one responsibility per function, checked return values,
-> no unnecessary globals, no duplicated logic, no unsafe input functions, meaningful comments, and no
-> machine-specific absolute paths.
-
 ## 12.1 Naming Conventions
 
-*Pending Phase 2 — table of file, function, variable, structure, enumeration and constant conventions with
-examples drawn from the planned API.*
+| Item | Convention | Example |
+| --- | --- | --- |
+| Source files | `lower_snake_case.c` | `case_manager.c` |
+| Header files | `lower_snake_case.h` | `case_manager.h` |
+| Functions | `lower_snake_case`, `<module>_<verb><Object>` | `caseManager_addCase` |
+| Local variables | `lowerCamelCase` | `caseCount` |
+| Structures | `PascalCase` with a `_t` suffix | `Case_t` |
+| Enumerations | `PascalCase` with a `_t` suffix | `CaseStatus_t` |
+| Enumeration constants | `UPPER_SNAKE_CASE` | `CASE_STATUS_CLOSED` |
+| Constants and macros | `UPPER_SNAKE_CASE` | `MAX_CASES` |
+| File-scope functions | `static` where the function is private to its module | `static void cascadeDeleteChildren(...)` |
 
 ## 12.2 Formatting Rules
 
-*Pending Phase 2.*
+- Indentation: four spaces, with no tabs anywhere in the project.
+- Brace style: the opening brace of a function or a control block is on its own line.
+- Maximum line length: 110 characters.
+- Compiler warning flags: `-Wall -Wextra -Wpedantic` with `-std=c11` for the C sources.
+- Comment style: a `/* ... */` block above a declaration; a single-line comment inside a function body where one
+  line of explanation is enough.
+- One statement per line, and spaces around every operator.
+- The same format is used in every source file, the same header format in every header file.
 
 ## 12.3 Function Rules
 
-*Pending Phase 2.*
+- One clear responsibility per function. A function whose description needs the word "and" is doing too much and is
+  split.
+- Every pointer argument is checked before it is dereferenced.
+- Every relevant input is validated before any state is changed.
+- Every function returns a meaningful value: a `CfStatus_t` when it can fail, a value or a `void` with a clear
+  contract otherwise. No return value is ever ignored.
+- A function that returns an error leaves the state exactly as it found it.
+- Functions are small enough to be understood on their own and to be tested in isolation.
 
 ## 12.4 Prohibited Practices
 
-*Pending Phase 2.*
-
----
+- Putting the complete application in `main.c`.
+- Ignoring a compiler warning or a return value.
+- Using unexplained magic numbers; every limit, weight and path is a named constant.
+- Using mutable global variables; the database is passed by pointer instead.
+- Duplicating logic that another module already provides.
+- Keeping unused variables, unused functions or commented-out code.
+- Using unsafe input functions: no `gets`, and no `scanf` for text.
+- Hard-coding machine-specific absolute paths; the data and report directories are relative and are named by
+  constants.
+- Copying code without understanding it.
 
 # 13. Application Flow
 
-> **Status: Partially complete.** The main application flowchart is already produced as §5.3 of the proposal.
-> Phase 2 will add the remaining operation flowcharts required by the brief.
-
 ## 13.1 Main Application Flowchart
 
-> See §5.3 (High-Level Workflow) of the proposal for the complete main application flowchart.
+The main application flowchart is given in §5.3 of the proposal and reproduced here in summary form.
+
+```
+        ┌──────────────────────┐
+        │   Application start   │
+        └──────────┬───────────┘
+                   │
+        ┌──────────▼───────────┐
+        │ Create the database   │   casefile_createDatabase()
+        └──────────┬───────────┘
+                   │ NULL? ─────────────► [!] Not enough memory ─► Exit failure
+                   │
+        ┌──────────▼───────────┐
+        │  storage_loadAll()   │   read data/*.txt
+        └──────────┬───────────┘
+                   │
+     ┌─────────────┼─────────────┐
+     │             │             │
+  Success      Missing        Corrupt
+     │             │             │
+     │             │      [!] Format message
+     │             │      "Starting with an empty case file"
+     │             │             │
+     └─────────────┴─────────────┘
+                   │
+        ┌──────────▼───────────┐
+        │   Display main menu  │◄──────────────┐
+        └──────────┬───────────┘               │
+                   │                           │
+        ┌──────────▼───────────┐   invalid     │
+        │  Read the choice     │──────────────►│ [!] Message
+        └──────────┬───────────┘               │
+                   │ valid                     │
+        ┌──────────▼───────────┐               │
+        │  Call the module     │               │
+        └──────────┬───────────┘               │
+                   │                           │
+        ┌──────────▼───────────┐               │
+        │  Read the status     │               │
+        └──────────┬───────────┘               │
+                   │                           │
+        ┌──────────▼───────────┐               │
+        │ Print result or [!]  │───────────────┘
+        │ error message        │
+        └──────────┬───────────┘
+                   │ choice = 0?
+                   │ yes
+        ┌──────────▼───────────┐
+        │ storage_saveAll()    │
+        └──────────┬───────────┘
+                   │
+        ┌──────────▼───────────┐
+        │ Release the database │   casefile_destroyDatabase()
+        └──────────┬───────────┘
+                   │
+        ┌──────────▼───────────┐
+        │   Application exit   │
+        └──────────────────────┘
+```
 
 ## 13.2 Operation Flow: Case Registration
 
-*Pending Phase 2.*
+```
+  Select "Register new case"
+        │
+        ├─ Read the title ────────────── empty? ─► [!] and return
+        ├─ Read the crime type ───────── unknown? ─► [!] and return
+        ├─ Read the priority ─────────── unknown? ─► [!] and return
+        ├─ Read the incident date ────── invalid? ─► [!] and return
+        ├─ Read the location, the officer and the summary
+        │
+        ▼
+  caseManager_addCase()
+        │
+        ├─ capacity reached? ─────────────────► CF_ERR_CAPACITY_FULL
+        ├─ validate the title, the date and the enumerations
+        ├─ generate the next unused CF-YYYY-NNNN from the incident year
+        └─ store the record
+        │
+        ▼
+  Print "[OK] Case registered." and the generated identifier
+```
 
 ## 13.3 Operation Flow: Evidence Registration and Examination
 
-*Pending Phase 2.*
+```
+  Select "Register evidence"
+        │
+        ├─ Read the case identifier ── unknown case? ─► [!] and return
+        ├─ Read the category ────────── unknown? ──────► [!] and return
+        ├─ Read the description ─────── empty? ───────► [!] and return
+        ├─ Read the collection date ─── invalid? ─────► [!] and return
+        ├─ Read the location, the collector and the status
+        │
+        ▼
+  evidenceManager_add() ──► generates EV-NNNNN
+        │
+        ▼
+  "Attach analysis attribute"  ──►  evidenceManager_addAttribute()
+        │   the key must be one of the six comparable keys
+        │   a key already present is replaced, not duplicated
+        │   the list is bounded by MAX_EVIDENCE_ATTRIBUTES
+        │
+        ▼
+  "Record chain-of-custody event"  ──►  evidenceManager_addCustodyEvent()
+        │   the action, the date, both handlers and the remarks are validated
+        │   the event is appended, so the log stays in order
+        │   the log is bounded by MAX_CUSTODY_EVENTS
+        │
+        ▼
+  "Update examination status"  ──►  evidenceManager_setStatus()
+            collected → in_transit → under_analysis → analysed → reported → released
+```
 
 ## 13.4 Operation Flow: Suspect Matching (Evidence Analysis)
 
-*Pending Phase 2.*
+```
+  Select "Analyse a case"
+        │
+        ▼
+  investigation_analyseCase(db, caseId, result)
+        │
+        ├─ Find the case ───────────────── not found? ─► CF_ERR_NOT_FOUND
+        ├─ Collect the suspects of the case
+        ├─ Count the evidence items that carry a comparable attribute
+        │
+        ├─ no suspects?  ───────────┐
+        ├─ no comparable evidence? ─┴─► CF_ERR_INSUFFICIENT_EVIDENCE
+        │                               "[!] Insufficient evidence ..." and no score
+        ▼
+  For each suspect, for each comparable attribute:
+        │
+        ├─ compare the attribute with the suspect profile
+        │     gender / hair / blood group → exact match, ignoring case
+        │     height / shoe size          → the suspect value must be inside the band
+        │     vehicle                     → the registration must be in the suspect list
+        │
+        ├─ matched?   add the weight to the score and record the factor
+        └─ not matched?   record the factor with a weight of zero
+        │
+        ▼
+  Cap the score at MAX_SUSPICION_SCORE
+        │
+        ▼
+  investigation_rankSuspects()  ──►  sort by descending score, stable
+        │
+        ▼
+  Print the ranking, every contributing and non-contributing factor,
+  and the educational disclaimer
+```
 
 ## 13.5 Operation Flow: Report Generation
 
-*Pending Phase 2.*
-
----
+```
+  Select "Investigation summary report" or "Evidence summary report"
+        │
+        ▼
+  Read the case identifier ───────── unknown case? ─► [!] and return
+        │
+        ▼
+  report_generateCaseSummary() / report_generateEvidenceSummary()
+        │
+        ├─ copy the case identity and the status
+        ├─ copy the suspect ranking with its factors
+        ├─ copy the evidence register and its custody history
+        ├─ copy the witness statements
+        └─ append the disclaimer
+        │      every write is bounds checked, so a short buffer truncates
+        │      rather than overflowing
+        ▼
+  Print the report on screen
+        │
+        ▼
+  "Save this report to a file? (y/n)"
+        │
+        ├─ yes ─► report_saveToFile()
+        │            mkdir reports/ if needed
+        │            fopen for writing ── fails? ─► [!] file error
+        │            fputs the report ──── fails? ─► [!] file error
+        │            fclose ─────────────── fails? ─► [!] file error
+        │            print the path
+        └─ no  ─► return to the menu
+```
 
 # 14. Unit-Test Plan
 
-> **Status: Pending — to be completed in Phase 2.**
-> The test-target list and requirement traceability already exist in the proposal (§4.3). Phase 2 will convert them
-> into the official test-case table with positive, negative and boundary cases, test data, setup and cleanup, and
-> the expected command.
+> **Status: Complete.** The plan below was executed; the results are in §19.2.
 
 ## 14.1 Functions Selected for Testing
 
-*Pending Phase 2 — validation, search, scoring/ranking, record insertion and deletion, storage round trip,
-report generation.*
+| Function | Module | Reason for Testing |
+| --- | --- | --- |
+| `validationReadLine`, `validationTrim`, `validationCopyField`, `validationParseInt`, `validationIsValidDate`, `validationIsValidIdentifier`, `validationParse*` | Validation | The foundation every other module relies on; a defect here corrupts the whole application. |
+| `caseManager_addCase`, `caseManager_findById`, `caseManager_filterByStatus`, `caseManager_update`, `caseManager_setStatus`, `caseManager_delete` | Case manager | The record lifecycle, the identifier rules and the cascade. |
+| `suspectManager_add`, `suspectManager_searchByName`, `suspectManager_listByCase`, `suspectManager_setPhysicalProfile`, `suspectManager_delete` | Suspect manager | The parent-record rule, the search and the profile. |
+| `evidenceManager_add`, `evidenceManager_addAttribute`, `evidenceManager_addCustodyEvent`, `evidenceManager_getCustodyHistory`, `evidenceManager_filterByCategory`, `evidenceManager_update` | Evidence manager | The attribute rules, the ordered custody log and the capacity limits. |
+| `witnessManager_add`, `witnessManager_setVerified`, `witnessManager_update` | Witness manager | The uniqueness of the statement reference and the verification flag. |
+| `investigation_compareAttribute`, `investigation_weightForKey`, `investigation_analyseCase`, `investigation_rankSuspects`, `investigation_computeProgress` | Investigation | Each comparison rule, the band boundaries, the score cap, the ranking and the insufficient-evidence decision. |
+| `storage_validateFormat`, `storage_writeLine`, `storage_sanitizeField`, `storage_buildPath` | Storage | The corruption detection, the checked writes and the record layout. |
+| `report_generateCaseSummary`, `report_generateEvidenceSummary` | Report generator | The report content, the error handling and the buffer safety. |
+
+Eight modules are covered, well beyond the required three functions.
 
 ## 14.2 Test Cases
 
-*Pending Phase 2 — official table with Test ID, function, category, input or condition, expected result and
-requirement ID. A minimum of ten meaningful cases across at least three functions is required, covering positive,
-negative and boundary categories.*
+The executed suite contains **164 cases across 32 suites**. The full list with the expected result of each is
+printed by the test runner; the breakdown by suite is in §19.2.
+
+| Test ID | Function | Category | Input or Condition | Expected Result | Requirement ID |
+| --- | --- | --- | --- | --- | --- |
+| UT-01 | `caseManager_addCase` | Positive | A complete, valid case | `CF_SUCCESS`; the register holds one case; the identifier is generated | FR-01 |
+| UT-02 | `caseManager_addCase` | Positive | Two cases in a row | The identifiers differ | FR-02 |
+| UT-03 | `caseManager_addCase` | Negative | An empty title | `CF_ERR_EMPTY_INPUT`; nothing is stored | FR-01 |
+| UT-04 | `caseManager_addCase` | Negative | The incident date `2026-02-30` | `CF_ERR_INVALID_DATE`; nothing is stored | FR-01 |
+| UT-05 | `caseManager_addCase` | Negative | A crime type outside the enumeration | `CF_ERR_INVALID_ENUM`; nothing is stored | FR-01 |
+| UT-06 | `caseManager_addCase` | Boundary | The register already holds `MAX_CASES` cases | `CF_ERR_CAPACITY_FULL`; the register is unchanged | FR-01 |
+| UT-07 | `caseManager_findById` | Negative | An identifier that is not registered | −1 | FR-04 |
+| UT-08 | `caseManager_filterByStatus` | Positive | Two cases with different statuses | Only the matching case is returned | FR-05 |
+| UT-09 | `caseManager_setStatus` | Positive | A valid new status | The status changes | FR-07 |
+| UT-10 | `caseManager_setStatus` | Negative | A status outside the enumeration | `CF_ERR_INVALID_ENUM`; the status is unchanged | FR-07 |
+| UT-11 | `caseManager_delete` | Positive | A case with a suspect, evidence and a witness | The case and all three children are removed | FR-08 |
+| UT-12 | `caseManager_delete` | Negative | An identifier that is not registered | `CF_ERR_NOT_FOUND` | FR-08 |
+| UT-13 | `suspectManager_add` | Negative | A parent case that does not exist | `CF_ERR_NOT_FOUND`; nothing is stored | FR-16 |
+| UT-14 | `suspectManager_add` | Negative | An age of 0 | `CF_ERR_INVALID_ARGUMENT`; nothing is stored | FR-10 |
+| UT-15 | `suspectManager_searchByName` | Positive | The text `desh` against `Ravi Deshmukh` | Exactly one suspect is returned | FR-13 |
+| UT-16 | `suspectManager_setPhysicalProfile` | Positive | A full profile with three vehicles | The profile is stored; a fourth vehicle gives `CF_ERR_CAPACITY_FULL` | FR-11 |
+| UT-17 | `evidenceManager_addAttribute` | Positive | The same key added twice | The list holds one entry with the later value | FR-19 |
+| UT-18 | `evidenceManager_addAttribute` | Negative | An unknown item, an unknown key and an empty value | `CF_ERR_NOT_FOUND`, `CF_ERR_INVALID_ENUM`, `CF_ERR_EMPTY_INPUT` | FR-19 |
+| UT-19 | `evidenceManager_addCustodyEvent` | Positive | Two events | Both are stored, in order | FR-22 |
+| UT-20 | `evidenceManager_addCustodyEvent` | Boundary | `MAX_CUSTODY_EVENTS` events, then one more | `CF_ERR_CAPACITY_FULL` | FR-24 |
+| UT-21 | `evidenceManager_update` | Positive | A new description | The description changes; the attributes and the custody history survive | FR-20 |
+| UT-22 | `witnessManager_add` | Positive | Two witnesses | The statement references differ | FR-26, FR-30 |
+| UT-23 | `witnessManager_setVerified` | Positive | Set, then clear | The flag follows the request | FR-28 |
+| UT-24 | `investigation_compareAttribute` | Positive | `height` band `175-185` against `178` | The weight of the height rule | FR-31 |
+| UT-25 | `investigation_compareAttribute` | Boundary | The band boundaries `175` and `185` | Both match; `186` does not | FR-31 |
+| UT-26 | `investigation_compareAttribute` | Negative | Different values | Zero weight and `matched` is 0 | FR-31 |
+| UT-27 | `investigation_analyseCase` | Positive | One matching gender attribute | The score is the weight of the rule | FR-31 |
+| UT-28 | `investigation_analyseCase` | Positive | Two matching attributes | The weights are added | FR-31 |
+| UT-29 | `investigation_analyseCase` | Boundary | Enough matching attributes to exceed the cap | The score is `MAX_SUSPICION_SCORE` | FR-31 |
+| UT-30 | `investigation_analyseCase` | Negative | No comparable evidence | `CF_ERR_INSUFFICIENT_EVIDENCE` | FR-34 |
+| UT-31 | `investigation_analyseCase` | Negative | No suspects | `CF_ERR_INSUFFICIENT_EVIDENCE` | FR-34 |
+| UT-32 | `investigation_analyseCase` | Negative | An unknown case | `CF_ERR_NOT_FOUND` | FR-31 |
+| UT-33 | `investigation_rankSuspects` | Positive | Three scores | They are ordered by descending score | FR-32 |
+| UT-34 | `investigation_rankSuspects` | Boundary | Three equal scores | The original order is kept | FR-32 |
+| UT-35 | `investigation_computeProgress` | Positive | A case with analysed evidence and a verified statement | 100 per cent | FR-35 |
+| UT-36 | `investigation_getDisclaimer` | Positive | The disclaimer text | It states that the score is not a forensic conclusion and not evidence of guilt | FR-36 |
+| UT-37 | `storage_validateFormat` | Positive | A file with the correct signature | `CF_SUCCESS` | FR-44 |
+| UT-38 | `storage_validateFormat` | Negative | A foreign signature, an empty file and a missing file | `CF_ERR_CORRUPT_FILE`, `CF_ERR_CORRUPT_FILE`, `CF_ERR_FILE_OPEN` | FR-44, FR-45 |
+| UT-39 | `report_generateCaseSummary` | Positive | A case with records | The report holds the identifier, the title, the suspect and the evidence | FR-37 |
+| UT-40 | `report_generateEvidenceSummary` | Positive | Evidence with attributes and a custody event | The report holds the description, the attribute and the handler | FR-38 |
+| UT-41 | `report_generateCaseSummary` | Boundary | A 64-byte buffer | The report is truncated and never overflows | FR-37 |
+| UT-42 | `report_generateCaseSummary` | Negative | An unknown case and a null pointer | `CF_ERR_NOT_FOUND` and `CF_ERR_NULL_POINTER` | FR-40 |
+| UT-43 | `validationIsValidDate` | Positive | `2026-01-14` | Accepted | FR-01, FR-17, FR-26 |
+| UT-44 | `validationIsValidDate` | Boundary | `2024-02-29` and `2000-02-29` | Both accepted | FR-01, FR-17, FR-26 |
+| UT-45 | `validationIsValidDate` | Negative | `2026-02-29`, `1900-02-29`, `2026-00-14`, `2026-13-01` | All rejected | FR-01, FR-17, FR-26 |
+| UT-46 | `validationParseInt` | Positive | `42`, `-17`, `0` | All parsed | FR-03 |
+| UT-47 | `validationParseInt` | Negative | `12abc`, `twelve`, `""` | All rejected | FR-03 |
+| UT-48 | `validationIsValidIdentifier` | Positive | `CF-2026-0001` | Accepted | FR-02 |
+| UT-49 | `validationIsValidIdentifier` | Boundary | 15 characters and 16 characters | The first is accepted, the second is rejected | FR-02 |
+| UT-50 | `validationCopyField` | Positive | A source longer than the field | The field is truncated and terminated | FR-01 |
+| UT-51 | `validationCopyField` | Positive | A field copied onto itself | The content is preserved | FR-01 |
+| UT-52 | `validationReadLine` | Positive | Two lines of input | Each read consumes exactly one line | FR-03 |
+| UT-53 | `validationReadLine` | Boundary | A line longer than the buffer | The line is truncated and the next read starts at the next line | FR-03 |
+| UT-54 | `validationCheckLength` | Boundary | A value of exactly the field length | Rejected | FR-01 |
+| UT-55 | `storage_sanitizeField` | Positive | A value containing the separator and a newline | Both are replaced with a space | FR-41 |
+| UT-56 | `storage_writeLine` | Positive | A write to an open file | The text and a newline are written | FR-41 |
 
 ## 14.3 Test Data and Setup
 
-*Pending Phase 2 — in-memory fixture construction, temporary file usage and cleanup after each test.*
+- **Test data.** All data is fictional and is built inside the test: a warehouse break-in case, two suspects with
+  full physical profiles, an evidence item with analysis attributes and custody events, and a witness. No test reads
+  the real `data/` directory.
+- **Initial conditions.** The database is created by `casefile_createDatabase()` in the fixture `SetUp` and released
+  in `TearDown`, so every test starts from an empty, known state and no test depends on the order of the others.
+- **Temporary files.** The line-reading tests write their input to a temporary file under
+  `/tmp/opencode_casefile_test/`, redirect standard input onto it with `dup2` and restore the original stream
+  afterwards. The file-format tests write their fixtures to the same directory.
+- **Cleanup.** The temporary directory and its files are removed after each test, so the suite leaves nothing behind
+  and can be run repeatedly.
 
 ## 14.4 Expected Test Command
 
@@ -897,50 +2799,96 @@ negative and boundary categories.*
 make test
 ```
 
----
-
 # 15. Makefile Design
-
-> **Status: Pending — to be completed in Phase 2.**
-> Targets, compiler variables and the strict flag set are already fixed by the guidelines.
 
 ## 15.1 Required Targets
 
 | Target | Purpose | Expected Output |
 | --- | --- | --- |
-| all | Build the application | `build/casefile` executable produced |
-| run | Run the application | Menu-driven console session |
-| test | Build and execute unit tests | gTest binary executed, summary printed |
-| clean | Remove generated files | `build/` contents removed |
+| all | Build the application | `build/casefile` |
+| run | Build if needed, then start the application | The interactive menu |
+| test | Build and execute the unit tests | The Google Test summary |
+| clean | Remove the generated files | `Cleaned build output, generated data files and reports.` |
+
+Two supporting targets complete the build:
+
+| Target | Purpose | Expected Output |
+| --- | --- | --- |
+| gtest-check | Confirm that Google Test can be found | Nothing, or an installation guide and a non-zero exit |
+| help | List the available targets | A short list of the targets |
 
 ## 15.2 Build Configuration
 
-*Pending Phase 2 — compilers, flags, include paths, gTest location strategy and output binary names.*
+| Item | Planned Value |
+| --- | --- |
+| C compiler | `cc` |
+| C++ compiler | `c++` |
+| C compiler flags | `-std=c11 -Wall -Wextra -Wpedantic -Iinclude -O2 -MMD -MP` |
+| C++ compiler flags | `-std=c++17 -Wall -Wextra -Iinclude -O2 -MMD -MP` |
+| Include paths | `-Iinclude` |
+| gTest libraries | Discovered automatically; see below |
+| Application executable | `build/casefile` |
+| Test executable | `build/casefile_test` |
 
----
+### 15.2.1 Google Test discovery
+
+Google Test may be installed in several different ways, so the Makefile searches for it rather than assuming one
+layout:
+
+1. If `GTEST_ROOT` is given, `<GTEST_ROOT>/include` and `<GTEST_ROOT>/lib` are used.
+2. Otherwise the search covers `/opt/homebrew/opt/googletest`, `/usr/local/opt/googletest`, `/opt/homebrew`,
+   `/usr/local`, `/usr`, `~/.local`, `~/local` and `~/opt`.
+
+Some installations provide `libgtest_main.a` separately and others build the `main()` function into `libgtest.a`.
+The Makefile adds the separate library only when it exists, so both layouts link cleanly.
+
+If Google Test cannot be found at all, `make test` stops with a message that explains how to install it, rather than
+failing later with a confusing linker error:
+
+```
+  [!] Google Test was not found on this machine.
+
+      The 'make test' target needs the Google Test library and headers.
+      Install it with one of the following:
+
+        macOS (Homebrew):   brew install googletest
+        Linux (Debian):     sudo apt install libgtest-dev cmake
+        Linux (Fedora):     sudo dnf install gtest-devel
+        From source:        see https://github.com/google/googletest
+
+      If Google Test is installed somewhere unusual, point the build at it:
+
+        make test GTEST_ROOT=/path/to/googletest
+```
+
+### 15.2.3 Build behaviour
+
+- Each source file is compiled separately into its own object file in `build/`.
+- The `-MMD -MP` flags write a dependency file next to every object file, and the Makefile includes them, so a
+  change to a header rebuilds exactly the objects that depend on it.
+- The application binary links the ten application objects; the test binary links the test objects and the nine
+  module objects but **not** `main.o`, because Google Test supplies its own `main()`.
+- `make clean` removes the `build/` directory, the generated data files and the `reports/` directory.
 
 # 16. Repository Structure
-
-> **Status: Pending — to be completed in Phase 2.**
-> The directory skeleton already exists (`src/`, `include/`, `tests/`, `data/`, `docs/`). Phase 2 fixes the final
-> file names, the purpose of every file and the `.gitignore` contents.
 
 ```
 CASEFILE/
 |
 |-- src/
-|   |-- main.c
-|   |-- validation.c
-|   |-- case_manager.c
-|   |-- suspect_manager.c
-|   |-- evidence_manager.c
-|   |-- witness_manager.c
-|   |-- investigation.c
-|   |-- report_generator.c
-|   `-- storage.c
+|   |-- main.c                 # application entry point and menu workflow
+|   |-- casefile.c             # shared database lookup helpers
+|   |-- validation.c           # reusable input and data validation
+|   |-- case_manager.c         # crime case register
+|   |-- suspect_manager.c      # suspect register and physical profile
+|   |-- evidence_manager.c     # evidence register and chain of custody
+|   |-- witness_manager.c      # witness register and statement references
+|   |-- investigation.c        # rule-based scoring, ranking and progress
+|   |-- report_generator.c     # investigation and evidence reports
+|   `-- storage.c              # file persistence and format validation
 |
 |-- include/
-|   |-- casefile.h
+|   |-- casefile.h             # structures, enumerations, constants, status codes
 |   |-- validation.h
 |   |-- case_manager.h
 |   |-- suspect_manager.h
@@ -951,19 +2899,20 @@ CASEFILE/
 |   `-- storage.h
 |
 |-- tests/
-|   |-- test_validation.cpp
-|   |-- test_records.cpp
-|   |-- test_analysis.cpp
-|   `-- test_storage.cpp
+|   |-- test_validation.cpp    # validation helpers and line reading
+|   |-- test_records.cpp       # the four record managers
+|   |-- test_analysis.cpp      # the rule-based matching engine
+|   `-- test_storage.cpp       # persistence format and report generation
 |
 |-- data/
-|   `-- sample_data.txt
+|   `-- sample_data.txt        # the fictional demonstration dataset
 |
 |-- docs/
-|   |-- project_proposal.md
-|   |-- detailed_design.md
-|   |-- mini_project_report.md
-|   `-- architecture.png
+|   |-- project_proposal.md    # Phase 1 deliverable
+|   |-- detailed_design.md     # Phase 2 deliverable
+|   |-- mini_project_report.md # this report
+|   |-- publish.sh             # one-time publication helper
+|   `-- architecture.png       # the exported architecture diagram
 |
 |-- Makefile
 |-- README.md
@@ -971,52 +2920,74 @@ CASEFILE/
 `-- LICENSE
 ```
 
----
+Every file has a clear purpose: one header per module, one test file per area of the design, and the documentation
+in one place. There are no empty files and no module that exists only to increase the file count.
 
 # 17. Git and GitHub Plan
-
-> **Status: Pending — to be completed in Phase 2.**
 
 ## 17.1 Repository Information
 
 | Field | Value |
 | --- | --- |
 | Repository name | `CASEFILE` |
-| Repository visibility | Public / As instructed |
-| Main branch | *Pending — to be confirmed* |
-| GitHub link | *Pending — repository to be created in Phase 4* |
+| Repository visibility | Public |
+| Main branch | `main` |
+| GitHub link | *Pending — the publication step is the last action of this project; the link is recorded here once the repository is published.* |
 
 ## 17.2 Planned Commit Milestones
 
 | Milestone | Planned Commit Message | Status |
 | --- | --- | --- |
-| Repository creation | Create initial project structure | Planned |
-| Data design | Define data model, enumerations and status codes | Planned |
-| Validation layer | Implement input validation module | Planned |
-| Case management | Implement case register module | Planned |
-| Suspect and witness modules | Implement suspect and witness register modules | Planned |
-| Evidence module | Implement evidence register and chain of custody | Planned |
-| Analysis engine | Implement rule-based suspicion scoring and ranking | Planned |
-| Reporting | Implement case and evidence report generation | Planned |
-| File handling | Implement file persistence and format validation | Planned |
-| Application shell | Implement menu-driven application entry point | Planned |
-| Unit testing | Add Google Test unit tests and Makefile test target | Planned |
-| Documentation | Document build, run and test instructions | Planned |
+| Repository creation | Create initial project structure | Complete |
+| Data design | Define data model, enumerations and status codes | Complete |
+| Validation layer | Implement input validation module | Complete |
+| Case management | Implement case register module | Complete |
+| Suspect and witness modules | Implement suspect and witness register modules | Complete |
+| Evidence module | Implement evidence register and chain of custody | Complete |
+| Analysis engine | Implement rule-based suspicion scoring and ranking | Complete |
+| Reporting | Implement investigation and evidence report generation | Complete |
+| File handling | Implement file persistence and format validation | Complete |
+| Application shell | Implement menu-driven application entry point | Complete |
+| Build automation | Add Makefile with build, run, test and clean targets | Complete |
+| Unit testing | Add Google Test unit tests | Complete |
+| Refinement | Improve start-up message and Google Test discovery | Complete |
+| Presentation | Align table columns with truncated display fields | Complete |
+| Documentation | Document build, run and test instructions | Complete |
+
+The history is a series of small, meaningful commits, one per design milestone, so that reading the log tells the
+story of how the project was built.
 
 ## 17.3 Files to Ignore
 
 ```
 build/
 *.o
-*.out
+*.a
+*.so
+*.dylib
+casefile
+casefile_test
 *.exe
+*.out
+data/cases.txt
+data/suspects.txt
+data/evidence.txt
+data/custody.txt
+data/witnesses.txt
+reports/
 *.log
 core
+core.*
 .DS_Store
-reports/
+.vscode/
+.idea/
+*.swp
+*~
+gtest_*.log
 ```
 
----
+The generated data files are ignored so that the demonstration data written by one run never overwrites the sample
+dataset that ships with the repository, and so that the same files are never committed twice.
 
 # 18. Implementation Status
 

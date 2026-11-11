@@ -1,0 +1,171 @@
+CASEFILE SAMPLE DATA — Forensic Evidence Management and Crime Investigation System
+=======================================================================================
+
+This file is a human-readable reference of the fictional dataset that will be shipped in
+data/cases.txt, data/suspects.txt, data/evidence.txt, data/custody.txt and data/witnesses.txt
+once the persistence format is finalised in Phase 2.
+
+ALL DATA BELOW IS FICTIONAL AND IS USED FOR TEACHING PURPOSES ONLY.
+No real crime, real person or real case identifier is represented here.
+
+
+CASE REGISTER
+-------------
+
+CF-2026-0001  "Warehouse Break-in and Cash Register Theft"
+              Type: THEFT | Priority: HIGH | Status: UNDER_INVESTIGATION
+              Incident: 2026-01-14  Location: Sector 9 Industrial Estate
+              Officer: Insp. R. Kadam | Suspects: 2 | Evidence: 3 | Witnesses: 2
+
+CF-2026-0002  "Assault at Riverside Park"
+              Type: ASSAULT | Priority: MEDIUM | Status: EVIDENCE_ANALYSIS
+              Incident: 2026-02-03  Location: Riverside Park, North Gate
+              Officer: Insp. M. Fernandes | Suspects: 2 | Evidence: 2 | Witnesses: 1
+
+CF-2026-0003  "Tampered Laboratory Sample Register"
+              Type: FRAUD | Priority: CRITICAL | Status: OPEN
+              Incident: 2026-02-11  Location: District Forensic Laboratory, Bay 2
+              Officer: Insp. A. Nair | Suspects: 1 | Evidence: 2 | Witnesses: 1
+
+
+SUSPECT REGISTER (with physical descriptors used for comparison)
+----------------------------------------------------------------
+
+SU-0001  Ravi Shankar Deshmukh   Age 34  M  Case CF-2026-0001
+         Gender: male   Height: 178 cm   Hair: black   Shoe: 42   Blood: O+
+         Known vehicles: MH-12-AB-4471
+         Alibi: "At the transport depot canteen until 21:00 (unconfirmed)"
+         Motive: "Owes money to the warehouse owner"     Status: UNDER_REVIEW
+
+SU-0002  Imran Sayyed Shaikh      Age 29  M  Case CF-2026-0001
+         Gender: male   Height: 171 cm   Hair: black   Shoe: 40   Blood: A+
+         Known vehicles: MH-14-QR-8890
+         Alibi: "Came home at 19:30; neighbour confirmed"
+         Motive: "None recorded"                          Status: UNDER_REVIEW
+
+SU-0003  Joseph Mathai Pereira    Age 41  M  Case CF-2026-0002
+         Gender: male   Height: 182 cm   Hair: brown   Shoe: 44   Blood: B+
+         Known vehicles: MH-11-KL-2276
+         Alibi: "Unknown"                                Status: PERSON_OF_INTEREST
+
+SU-0004  Sameer Joshi             Age 27  M  Case CF-2026-0002
+         Gender: male   Height: 165 cm   Hair: brown   Shoe: 39   Blood: O+
+         Known vehicles: —
+         Alibi: "In office until 20:00"                  Status: UNDER_REVIEW
+
+SU-0005  Dr. Leela Narayanan       Age 52  F  Case CF-2026-0003
+         Gender: female Height: 160 cm   Hair: grey    Shoe: 37   Blood: AB+
+         Known vehicles: —
+         Alibi: "On night duty, log confirmed"           Status: UNDER_REVIEW
+
+
+EVIDENCE REGISTER
+-----------------
+
+EV-0001  Case CF-2026-0001  Category: PHYSICAL_TRACE
+         "Fibre strand recovered from the broken rear shutter"
+         Collected 2026-01-14 09:20  Sector 9 Industrial Estate  By: Constable A. Naik
+         Attributes: hair=black ; height=170-185
+         Status: EXAMINED
+
+EV-0002  Case CF-2026-0001  Category: VEHICLE
+         "Tyre impression and wheel fragment near the loading bay"
+         Collected 2026-01-14 10:05  Sector 9 Industrial Estate  By: Constable A. Naik
+         Attributes: vehicle=MH-12-AB-4471 ; height=170-185
+         Status: UNDER_ANALYSIS
+
+EV-0003  Case CF-2026-0001  Category: DOCUMENTARY
+         "Tampered cash-register audit slip"
+         Collected 2026-01-15 11:30  District Forensic Laboratory  By: Insp. R. Kadam
+         Attributes: height=175-185 ; shoe=41-43
+         Status: COLLECTED
+
+EV-0004  Case CF-2026-0002  Category: BIOLOGICAL
+         "Blood-stained cloth fragment"
+         Collected 2026-02-03 18:45  Riverside Park, North Gate  By: Constable S. Pawar
+         Attributes: blood=B+ ; gender=male ; height=178-186
+         Status: EXAMINED
+
+EV-0005  Case CF-2026-0002  Category: PHYSICAL_TRACE
+         "Footprint cast from the park pathway"
+         Collected 2026-02-03 19:10  Riverside Park, North Gate  By: Constable S. Pawar
+         Attributes: shoe=43-45 ; height=180-190
+         Status: UNDER_ANALYSIS
+
+EV-0006  Case CF-2026-0003  Category: DOCUMENTARY
+         "Altered laboratory sample register page"
+         Collected 2026-02-11 08:50  District Forensic Laboratory, Bay 2  By: Insp. A. Nair
+         Attributes: height=155-165
+         Status: ANALYSED
+
+EV-0007  Case CF-2026-0003  Category: DIGITAL
+         "Laboratory bay access-control log extract"
+         Collected 2026-02-11 12:15  District Forensic Laboratory, Bay 2  By: Insp. A. Nair
+         Attributes: —
+         Status: REPORTED
+
+
+CHAIN OF CUSTODY (illustrative entries)
+---------------------------------------
+
+EV-0001  COLLECTED   2026-01-14 09:20  From: Scene       To: C. Naik   Loc: Sector 9 Industrial Estate
+                     "Sealed in paper bag 4412"
+EV-0001  TRANSFERRED 2026-01-14 14:40  From: C. Naik     To: Evidence Store  Loc: District Forensic Laboratory
+                     "Received into locker L-14"
+EV-0001  ANALYSED   2026-02-01 10:15  From: Evidence Store  To: Examiner P. Ghosh  Loc: Lab Bay 2
+                     "Fibre microscopy comparison performed"
+
+EV-0002  COLLECTED   2026-01-14 10:05  From: Scene       To: C. Naik   Loc: Sector 9 Industrial Estate
+EV-0002  SEALED      2026-01-14 15:00  From: C. Naik     To: Evidence Store  Loc: District Forensic Laboratory
+EV-0002  TRANSFERRED 2026-02-03 09:30  From: Evidence Store  To: Examiner P. Ghosh  Loc: Lab Bay 2
+
+EV-0004  COLLECTED   2026-02-03 18:45  From: Scene       To: S. Pawar  Loc: Riverside Park, North Gate
+EV-0004  TRANSFERRED 2026-02-04 08:20  From: S. Pawar    To: Evidence Store  Loc: District Forensic Laboratory
+EV-0004  ANALYSED   2026-02-10 11:45  From: Evidence Store  To: Examiner P. Ghosh  Loc: Lab Bay 2
+                     "Blood group determined"
+
+EV-0007  COLLECTED   2026-02-11 12:15  From: Scene       To: Insp. A. Nair  Loc: District Forensic Laboratory, Bay 2
+EV-0007  REPORTED    2026-02-12 09:00  From: Insp. A. Nair  To: Case File CF-2026-0003  Loc: Records Room
+
+
+WITNESS REGISTER
+----------------
+
+WI-0001  Statement ST-0001  Case CF-2026-0001
+         Meera Kulkarni  98200 41155
+         "Observed a person carrying a canvas bag near the loading bay at about 21:20.
+          The person was wearing a dark jacket. Did not recognise the face."
+         Recorded 2026-01-15  Verified: YES
+
+WI-0002  Statement ST-0002  Case CF-2026-0001
+         Harish Bhat      98200 77314
+         "The gate was propped open with a piece of wood. Noticed it on my morning round."
+         Recorded 2026-01-16  Verified: NO
+
+WI-0003  Statement ST-0003  Case CF-2026-0002
+         Anita Rodrigues  99456 20318
+         "Heard an argument near the north gate, then saw a man running towards the river side."
+         Recorded 2026-02-04  Verified: YES
+
+WI-0004  Statement ST-0004  Case CF-2026-0003
+         Suresh Iyer      99308 77452
+         "The register page was in the cabinet on the morning of the 10th. I signed the book that evening."
+         Recorded 2026-02-12  Verified: NO
+
+
+EXPECTED ANALYSIS OUTCOME (for demonstration only)
+-------------------------------------------------
+
+Case CF-2026-0001:
+  SU-0001  hair=black (EV-0001) + vehicle match (EV-0002) + shoe band (EV-0003)  -> highest score
+  SU-0002  hair=black (EV-0001)                                                  -> lower score
+
+Case CF-2026-0002:
+  SU-0003  blood=B+ (EV-0004) + shoe band (EV-0005) + height band (EV-0004)      -> highest score
+  SU-0004  height band only                                                      -> lower score
+
+Case CF-2026-0003:
+  SU-0005  height band (EV-0006)                                                  -> low but non-zero score
+  Note: EV-0007 carries no comparable attribute and therefore contributes nothing.
+        If a case contained ONLY non-comparable evidence, the engine must report
+        "insufficient evidence" rather than a score of zero.

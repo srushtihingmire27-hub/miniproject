@@ -1,0 +1,37 @@
+# Build output
+build/
+*.o
+*.a
+*.so
+*.dylib
+
+# Executables
+casefile
+casefile_test
+*.exe
+*.out
+
+# Generated runtime data (keep the folder and its sample file)
+data/cases.txt
+data/suspects.txt
+data/evidence.txt
+data/custody.txt
+data/witnesses.txt
+
+# Generated reports
+reports/
+
+# Logs and core dumps
+*.log
+core
+core.*
+
+# Editor / OS noise
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
+
+# Google Test temporary artefacts
+gtest_*.log

@@ -51,6 +51,54 @@ static void printStatus(CfStatus_t status, const char *successMessage)
 }
 
 /*
+ * Copy a value into a fixed-width display field.
+ *
+ * A value that does not fit is shortened and marked with an ellipsis, so that
+ * the columns of a table stay aligned whatever the user typed.
+ *
+ * @param destination Destination buffer.
+ * @param destinationSize Size of the destination buffer.
+ * @param source Value to display (may be NULL).
+ * @param width Column width in characters.
+ */
+static void displayField(char *destination, size_t destinationSize, const char *source, size_t width)
+{
+    size_t length;
+
+    if (destination == NULL || destinationSize == 0U)
+    {
+        return;
+    }
+
+    destination[0] = '\0';
+
+    if (source == NULL)
+    {
+        return;
+    }
+
+    length = strlen(source);
+
+    if (length <= width)
+    {
+        validationCopyField(destination, destinationSize, source);
+        return;
+    }
+
+    if (width < 4U || destinationSize <= width)
+    {
+        validationCopyField(destination, destinationSize, source);
+        return;
+    }
+
+    memcpy(destination, source, width - 3U);
+    destination[ width - 3U ] = '.';
+    destination[ width - 2U ] = '.';
+    destination[ width - 1U ] = '.';
+    destination[ width ] = '\0';
+}
+
+/*
  * Ask the user to confirm a destructive action.
  *
  * @param question Question to present.
@@ -119,16 +167,21 @@ static void listCases(const CasefileDb_t *db)
         return;
     }
 
-    printf("%-16s %-34s %-16s %-12s %s\n", "CASE ID", "TITLE", "CRIME", "STATUS", "PRIORITY");
-    printf("-------------------------------------------------------------------------------------\n");
+    printf("%-16s %-36s %-18s %-20s %s\n", "CASE ID", "TITLE", "CRIME", "STATUS", "PRIORITY");
+    printf("-----------------------------------------------------------------------------------------------\n");
 
     for (index = 0U; index < db->caseCount; index++)
     {
         const Case_t *record = &db->cases[ index ];
+        char title[TITLE_LENGTH + 1U];
+        char crime[NAME_LENGTH + 1U];
+        char status[NAME_LENGTH + 1U];
 
-        printf("%-16s %-34s %-16s %-12s %s\n", record->caseId, record->title,
-               validationCrimeTypeName(record->crimeType),
-               validationCaseStatusName(record->status),
+        displayField(title, sizeof(title), record->title, 36U);
+        displayField(crime, sizeof(crime), validationCrimeTypeName(record->crimeType), 18U);
+        displayField(status, sizeof(status), validationCaseStatusName(record->status), 20U);
+
+        printf("%-16s %-36s %-18s %-20s %s\n", record->caseId, title, crime, status,
                validationCasePriorityName(record->priority));
     }
 
@@ -614,19 +667,27 @@ static void listSuspects(const CasefileDb_t *db)
         return;
     }
 
-    printf("%-12s %-30s %-6s %-12s %s\n", "ID", "NAME", "AGE", "STATUS", "ALIBI");
-    printf("-----------------------------------------------------------------------------------\n");
+    printf("%-12s %-28s %-6s %-18s %s\n", "ID", "NAME", "AGE", "STATUS", "ALIBI");
+    printf("---------------------------------------------------------------------------------------------------\n");
 
     /* Streamed from the database so that no large copy is placed on the stack. */
     for (index = 0U; index < db->suspectCount; index++)
     {
+        char name[NAME_LENGTH + 1U];
+        char status[NAME_LENGTH + 1U];
+        char alibi[ALIBI_LENGTH + 1U];
+
         if (strcmp(db->suspects[index].caseId, caseId) != 0)
         {
             continue;
         }
-        printf("%-12s %-30s %-6d %-12s %s\n", db->suspects[index].suspectId,
-               db->suspects[index].fullName, db->suspects[index].age,
-               validationSuspectStatusName(db->suspects[index].status), db->suspects[index].alibi);
+
+        displayField(name, sizeof(name), db->suspects[index].fullName, 28U);
+        displayField(status, sizeof(status), validationSuspectStatusName(db->suspects[index].status), 18U);
+        displayField(alibi, sizeof(alibi), db->suspects[index].alibi, 40U);
+
+        printf("%-12s %-28s %-6d %-18s %s\n", db->suspects[index].suspectId, name,
+               db->suspects[index].age, status, alibi);
     }
 
     printf("\n  %zu suspect(s).\n", count);
@@ -646,19 +707,24 @@ static void searchSuspects(const CasefileDb_t *db)
     }
     validationTrim(searchText);
 
-    printf("%-12s %-30s %-16s %-6s %s\n", "ID", "NAME", "CASE", "AGE", "STATUS");
+    printf("%-12s %-28s %-16s %-6s %s\n", "ID", "NAME", "CASE", "AGE", "STATUS");
     printf("-----------------------------------------------------------------------------------\n");
 
     count = 0U;
     for (index = 0U; index < db->suspectCount; index++)
     {
+        char name[NAME_LENGTH + 1U];
+
         if (validationContainsIgnoreCase(db->suspects[index].fullName, searchText) == 0)
         {
             continue;
         }
         count++;
-        printf("  %-12s %-30s %-16s %-6d %s\n", db->suspects[index].suspectId,
-               db->suspects[index].fullName, db->suspects[index].caseId, db->suspects[index].age,
+
+        displayField(name, sizeof(name), db->suspects[index].fullName, 28U);
+
+        printf("  %-12s %-28s %-16s %-6d %s\n", db->suspects[index].suspectId, name,
+               db->suspects[index].caseId, db->suspects[index].age,
                validationSuspectStatusName(db->suspects[index].status));
     }
 
@@ -940,21 +1006,29 @@ static void listEvidence(const CasefileDb_t *db)
         return;
     }
 
-    printf("%-12s %-18s %-38s %-14s %s\n", "ID", "CATEGORY", "DESCRIPTION", "STATUS", "COLLECTED");
-    printf("--------------------------------------------------------------------------------------------------\n");
+    printf("%-12s %-18s %-44s %-18s %s\n", "ID", "CATEGORY", "DESCRIPTION", "STATUS", "COLLECTED");
+    printf("------------------------------------------------------------------------------------------------------------------\n");
 
     /* Streamed from the database so that no large copy is placed on the stack. */
     for (index = 0U; index < db->evidenceCount; index++)
     {
+        char description[EVIDENCE_DESC_LENGTH + 1U];
+        char category[NAME_LENGTH + 1U];
+        char status[NAME_LENGTH + 1U];
+
         if (strcmp(db->evidence[index].caseId, caseId) != 0)
         {
             continue;
         }
-        printf("%-12s %-18s %-38s %-14s %s\n", db->evidence[index].evidenceId,
-               validationEvidenceCategoryName(db->evidence[index].category),
-               db->evidence[index].description,
-               validationEvidenceStatusName(db->evidence[index].status),
-               db->evidence[index].collectionDate);
+
+        displayField(description, sizeof(description), db->evidence[index].description, 44U);
+        displayField(category, sizeof(category),
+                    validationEvidenceCategoryName(db->evidence[index].category), 18U);
+        displayField(status, sizeof(status),
+                    validationEvidenceStatusName(db->evidence[index].status), 18U);
+
+        printf("%-12s %-18s %-44s %-18s %s\n", db->evidence[index].evidenceId, category,
+               description, status, db->evidence[index].collectionDate);
     }
 
     printf("\n  %zu evidence item(s).\n", count);

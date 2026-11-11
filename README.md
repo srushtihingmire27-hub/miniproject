@@ -400,14 +400,16 @@ This is an individual project.
 
 | Field | Details |
 | --- | --- |
-| Student name | *[To be completed by the student]* |
-| Roll number | *[To be completed by the student]* |
-| Division / batch | *[To be completed by the student]* |
+| Student name | *Srushti Hingmire* |
+| Roll number | *612505154* |
+| Division
+| *elec div 2* |
 
 ## GitHub repository
 
 <https://github.com/srushtihingmire27-hub/miniproject>
 
 ## License
+
 
 MIT — see [`LICENSE`](LICENSE).

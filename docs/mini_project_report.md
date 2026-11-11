@@ -402,65 +402,59 @@ progress, and generated reports.
 
 ## 4.3 Requirement Traceability
 
-> This table is completed against the module and function design, which is finalised in **Phase 2**; the test IDs
-> correspond to the Unit-Test Plan (`docs/detailed_design.md`, §14) and will be confirmed after the gTest suite is
-> written in Phase 3. Entries marked *(provisional)* are confirmed in Phase 2.
+> The Test IDs refer to the rows of the Unit-Test Plan in §14.2, which are the cases of the executed Google Test
+> suite reported in §19.2.
 
 | Requirement ID | Module | Function or Feature | Test ID |
 | --- | --- | --- | --- |
-| FR-01 | `case_manager` | `caseManager_addCase` | UT-01, UT-02 |
-| FR-02 | `case_manager` | `caseManager_addCase`, `caseManager_findById` | UT-01, UT-03 |
-| FR-03 | `case_manager` | `caseManager_listAll` | UT-04 |
-| FR-04 | `case_manager` | `caseManager_findById` | UT-03, UT-04 |
-| FR-05 | `case_manager` | `caseManager_filterByStatus` | UT-05 |
-| FR-06 | `case_manager` | `caseManager_update` | UT-06 |
-| FR-07 | `case_manager` | `caseManager_setStatus` | UT-07 |
-| FR-08 | `case_manager` | `caseManager_delete` (cascade) | UT-08 |
-| FR-09 | `case_manager` | `caseManager_findById` + report layer | UT-04 |
-| FR-10 | `suspect_manager` | `suspectManager_add` | UT-09, UT-10 |
-| FR-11 | `suspect_manager` | `suspectManager_setPhysicalProfile` | UT-11 |
-| FR-12 | `suspect_manager` | `suspectManager_listByCase` | UT-12 |
-| FR-13 | `suspect_manager` | `suspectManager_searchByName` | UT-13 |
-| FR-14 | `suspect_manager` | `suspectManager_update` | UT-14 |
-| FR-15 | `suspect_manager` | `suspectManager_delete` | UT-15 |
-| FR-16 | `suspect_manager` | `suspectManager_add` (parent case check) | UT-10 |
-| FR-17 | `evidence_manager` | `evidenceManager_add` | UT-16, UT-17 |
-| FR-18 | `evidence_manager` | `evidenceManager_add` / `validation_isValidCategory` | UT-17, UT-18 |
-| FR-19 | `evidence_manager` | `evidenceManager_addAttribute` | UT-19 |
-| FR-20 | `evidence_manager` | `evidenceManager_update`, `evidenceManager_setStatus` | UT-20 |
-| FR-21 | `evidence_manager` | `evidenceManager_searchByDescription`, `evidenceManager_filterByStatus` | UT-21, UT-22 |
-| FR-22 | `evidence_manager` | `evidenceManager_addCustodyEvent` | UT-23, UT-24 |
-| FR-23 | `evidence_manager` | `evidenceManager_getCustodyHistory` | UT-24 |
-| FR-24 | `evidence_manager` | `evidenceManager_addCustodyEvent` | UT-25 |
-| FR-25 | `evidence_manager` | `evidenceManager_delete` | UT-26 |
-| FR-26 | `witness_manager` | `witnessManager_add` | UT-27 |
-| FR-27 | `witness_manager` | `witnessManager_searchByName` | UT-28 |
-| FR-28 | `witness_manager` | `witnessManager_update`, `witnessManager_setVerified` | UT-29 |
-| FR-29 | `witness_manager` | `witnessManager_delete` | UT-30 |
-| FR-30 | `witness_manager` | `witnessManager_add` (statement-ref uniqueness) | UT-27 |
-| FR-31 | `investigation` | `investigation_scoreSuspects` | UT-31, UT-32 |
-| FR-32 | `investigation` | `investigation_rankSuspects` | UT-33 |
-| FR-33 | `investigation` | `investigation_scoreSuspects` (factor list) | UT-31, UT-34 |
-| FR-34 | `investigation` | `investigation_scoreSuspects` (insufficient-evidence path) | UT-35, UT-36 |
-| FR-35 | `investigation` | `investigation_computeProgress` | UT-37 |
-| FR-36 | `investigation` | `investigation_getDisclaimer` | UT-38 |
-| FR-37 | `report_generator` | `report_generateCaseSummary` | UT-39 |
+| FR-01 | `case_manager` | `caseManager_addCase` | UT-01, UT-03, UT-04, UT-05, UT-06 |
+| FR-02 | `case_manager` | `caseManager_generateId` | UT-02, UT-48, UT-49 |
+| FR-03 | `case_manager` | `caseManager_findById`, `caseManager_listAll` | UT-07 |
+| FR-04 | `case_manager` | `caseManager_getCase` | UT-07 |
+| FR-05 | `case_manager` | `caseManager_filterByStatus`, `caseManager_filterByCrimeType` | UT-08 |
+| FR-06 | `case_manager` | `caseManager_update` | UT-21 |
+| FR-07 | `case_manager` | `caseManager_setStatus` | UT-09, UT-10 |
+| FR-08 | `case_manager` | `caseManager_delete` (cascade) | UT-11, UT-12 |
+| FR-09 | `report_generator` | `report_generateCaseSummary` | UT-39 |
+| FR-10 | `suspect_manager` | `suspectManager_add` | UT-01, UT-14 |
+| FR-11 | `suspect_manager` | `suspectManager_setPhysicalProfile` | UT-16 |
+| FR-12 | `suspect_manager` | `suspectManager_listByCase` | UT-15 |
+| FR-13 | `suspect_manager` | `suspectManager_searchByName` | UT-15 |
+| FR-14 | `suspect_manager` | `suspectManager_update` | UT-23 |
+| FR-15 | `suspect_manager` | `suspectManager_delete` | UT-11 |
+| FR-16 | `suspect_manager` | `suspectManager_add` (parent case check) | UT-13 |
+| FR-17 | `evidence_manager` | `evidenceManager_add` | UT-19, UT-20 |
+| FR-18 | `evidence_manager` | `evidenceManager_add` (category check) | UT-05 |
+| FR-19 | `evidence_manager` | `evidenceManager_addAttribute` | UT-17, UT-18 |
+| FR-20 | `evidence_manager` | `evidenceManager_update`, `evidenceManager_setStatus` | UT-21 |
+| FR-21 | `evidence_manager` | `evidenceManager_searchByDescription`, `evidenceManager_filterByCategory` | UT-21 |
+| FR-22 | `evidence_manager` | `evidenceManager_addCustodyEvent` | UT-19 |
+| FR-23 | `evidence_manager` | `evidenceManager_getCustodyHistory` | UT-19 |
+| FR-24 | `evidence_manager` | `evidenceManager_addCustodyEvent` (capacity) | UT-20 |
+| FR-25 | `evidence_manager` | `evidenceManager_delete` | UT-11 |
+| FR-26 | `witness_manager` | `witnessManager_add` | UT-22 |
+| FR-27 | `witness_manager` | `witnessManager_searchByName` | UT-15 |
+| FR-28 | `witness_manager` | `witnessManager_update`, `witnessManager_setVerified` | UT-23 |
+| FR-29 | `witness_manager` | `witnessManager_delete` | UT-11 |
+| FR-30 | `witness_manager` | `witnessManager_add` (statement-ref uniqueness) | UT-22 |
+| FR-31 | `investigation` | `investigation_compareAttribute`, `investigation_analyseCase` | UT-24, UT-25, UT-26, UT-27, UT-28, UT-29 |
+| FR-32 | `investigation` | `investigation_rankSuspects` | UT-33, UT-34 |
+| FR-33 | `investigation` | the recorded factors of `investigation_analyseCase` | UT-27, UT-28 |
+| FR-34 | `investigation` | `investigation_analyseCase` (insufficient-evidence path) | UT-30, UT-31 |
+| FR-35 | `investigation` | `investigation_computeProgress` | UT-35 |
+| FR-36 | `investigation` | `investigation_getDisclaimer` | UT-36 |
+| FR-37 | `report_generator` | `report_generateCaseSummary` | UT-39, UT-41 |
 | FR-38 | `report_generator` | `report_generateEvidenceSummary` | UT-40 |
-| FR-39 | `report_generator` | `report_saveToFile` | UT-41 |
-| FR-40 | `report_generator` | `report_generateCaseSummary` | UT-42 |
-| FR-41 | `storage` | `storage_saveAll` | UT-43, UT-44 |
-| FR-42 | `storage` | `storage_loadAll` | UT-43, UT-45 |
-| FR-43 | `storage` | `storage_saveAll` + `storage_loadAll` round trip | UT-43 |
-| FR-44 | `storage` | `storage_validateFormat` | UT-45, UT-46 |
-| FR-45 | `storage` | `storage_loadAll` (missing / empty file) | UT-46, UT-47 |
-| FR-46 | all modules | `CfStatus_t` return values | UT-48 |
-| FR-47 (validation) | `validation` | `validation_isValidDate`, `validation_isValidId`, `validation_isValidEnum`, `validation_readLine`, `validation_parseInt` | UT-48 to UT-56 *(provisional)* |
-| FR-48 (validation) | `validation` | `validation_isNonEmpty`, `validation_isValidPhone`, `validation_trim`, `validation_copyField` | UT-57 to UT-62 *(provisional)* |
-
-> The provisional block will be reconciled with the final Unit-Test Plan in Phase 2 and the executed results in
-> Phase 4. Test counts above are a plan, not a report of results.
-
----
+| FR-39 | `report_generator` | `report_saveToFile` | UT-39 |
+| FR-40 | `report_generator` | `report_generateCaseSummary` (unknown case) | UT-42 |
+| FR-41 | `storage` | `storage_saveAll`, `storage_writeLine` | UT-55, UT-56 |
+| FR-42 | `storage` | `storage_loadAll` | UT-37, UT-38 |
+| FR-43 | `storage` | the save and load round trip | UT-37 |
+| FR-44 | `storage` | `storage_validateFormat` | UT-37, UT-38 |
+| FR-45 | `storage` | `storage_loadAll` (missing, empty and corrupt files) | UT-38 |
+| FR-46 | all modules | the `CfStatus_t` return values | UT-42 |
+| FR-47 (validation) | `validation` | `validationIsValidDate` | UT-43, UT-44, UT-45 |
+| FR-48 (validation) | `validation` | `validationParseInt`, `validationIsValidIdentifier`, `validationCopyField`, `validationCheckLength`, `validationReadLine` | UT-46, UT-47, UT-49, UT-50, UT-51, UT-52, UT-53, UT-54 |
 
 # 5. High-Level Architecture
 
@@ -2929,10 +2923,10 @@ in one place. There are no empty files and no module that exists only to increas
 
 | Field | Value |
 | --- | --- |
-| Repository name | `CASEFILE` |
+| Repository name | `miniproject` |
 | Repository visibility | Public |
 | Main branch | `main` |
-| GitHub link | *Pending — the publication step is the last action of this project; the link is recorded here once the repository is published.* |
+| GitHub link | <https://github.com/srushtihingmire27-hub/miniproject> |
 
 ## 17.2 Planned Commit Milestones
 
@@ -3406,7 +3400,7 @@ for.
 - [x] Generated files are not committed.
 - [x] The repository contains the complete project.
 - [x] The repository was cloned and verified independently (§19.4).
-- [ ] The correct GitHub link is submitted *(pending the publication step)*.
+- [x] The correct GitHub link is submitted: <https://github.com/srushtihingmire27-hub/miniproject>
 
 ## Documentation
 
@@ -3446,7 +3440,7 @@ Division / batch:
 
 GitHub repository link:
 
-*[Pending — repository to be created in Phase 4]*
+<https://github.com/srushtihingmire27-hub/miniproject>
 
 Project proposal location:
 

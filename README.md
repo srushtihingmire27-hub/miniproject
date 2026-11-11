@@ -406,7 +406,7 @@ This is an individual project.
 
 ## GitHub repository
 
-*Pending — the repository is published from this directory; the link is recorded in `docs/mini_project_report.md` §24.*
+<https://github.com/srushtihingmire27-hub/miniproject>
 
 ## License
 

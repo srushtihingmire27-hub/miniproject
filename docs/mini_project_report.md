@@ -46,20 +46,24 @@ reports.
 
 | Field | Details |
 | --- | --- |
-| Student name | *[To be completed by the student]* |
-| Roll number | *[To be completed by the student]* |
-| Division / batch | *[To be completed by the student]* |
-| Repository name | `CASEFILE` |
-| GitHub repository link | *[Pending — repository to be created in Phase 4]* |
+| Student name | Srushti Hingmire |
+| Roll number | 612505154 |
+| Division / batch | elec div 2 |
+| Repository name | `miniproject` |
+| GitHub repository link | <https://github.com/srushtihingmire27-hub/miniproject> |
 
 ## 1.4 Individual Project Declaration
 
 I confirm that this project is my individual work. I understand the design, source code, unit tests, Makefile and
 documentation included in this repository, and I am prepared to explain or modify any part during evaluation.
 
+Submitted by Srushti Hingmire (Roll number 612505154, elec div 2) as an individual mini project.
+
 Student signature or acknowledgement:
 
-*[Signature to be added by the student before submission]*
+Srushti Hingmire
+
+*(Signature to be completed by hand on the submitted copy.)*
 
 ---
 
@@ -260,7 +264,7 @@ progress, and generated reports.
    identifiers are used.
 2. The application operates as a **single-user, single-process, offline** command-line tool on a local machine.
 3. The **file system is writable** in the working directory; the `data/` directory is used for persistence.
-4. **Maximum record counts are fixed and modest** (e.g. 100 cases, 500 suspects, 500 evidence items, 300 witnesses),
+4. **Maximum record counts are fixed and modest** (100 cases, 400 suspects, 400 evidence items, 300 witnesses),
    so fixed-capacity arrays are sufficient and no dynamic memory is required for record storage.
 5. **Dates are entered in ISO format `YYYY-MM-DD`** and validated for calendar correctness (including leap years).
 6. **Identifiers follow a fixed pattern** (`CF-YYYY-NNNN`, `SU-NNNN`, `EV-NNNN`, `WI-NNNN`, `ST-NNNN`) and are
@@ -2947,6 +2951,10 @@ in one place. There are no empty files and no module that exists only to increas
 | Refinement | Improve start-up message and Google Test discovery | Complete |
 | Presentation | Align table columns with truncated display fields | Complete |
 | Documentation | Document build, run and test instructions | Complete |
+| Design document | Complete the detailed design in the master report | Complete |
+| Diagrams and link | Record the repository link and export the architecture diagrams | Complete |
+| Cleanup | Remove the one-time publication helper | Complete |
+| Student details | Fill in the student details in the README and the master report | Complete |
 
 The history is a series of small, meaningful commits, one per design milestone, so that reading the log tells the
 story of how the project was built.
@@ -3428,15 +3436,15 @@ Defence / Law Enforcement — Forensic Laboratory Management and Crime Investiga
 
 Student name:
 
-*[To be completed by the student]*
+Srushti Hingmire
 
 Roll number:
 
-*[To be completed by the student]*
+612505154
 
 Division / batch:
 
-*[To be completed by the student]*
+elec div 2
 
 GitHub repository link:
 
@@ -3486,7 +3494,7 @@ make clean
 
 Submission date:
 
-*[To be completed at submission time]*
+12 November 2026
 
 ---
 
@@ -3522,8 +3530,8 @@ Submission date:
    `third_party/googletest` and let the Makefile build it from source, or (c) a system path that already contains
    `libgtest`. The Makefile will implement auto-detection with a clear error message regardless, but the fallback
    target differs per option.
-2. **Record capacities** (100 cases / 500 suspects / 500 evidence items / 300 witnesses) — confirm these suit your
-   demonstration data volume.
+2. **Record capacities** — confirmed and implemented as 100 cases, 400 suspects, 400 evidence items and 300
+   witnesses, so that the in-memory structures stay within a safe size.
 3. **Case identifier format** `CF-YYYY-NNNN` using the current year — confirm, or state a preferred pattern.
 4. **Crime types** proposed: homicide, theft, assault, fraud, vandalism, cybercrime, traffic fatality, arson,
    other — confirm the list you want to demonstrate.

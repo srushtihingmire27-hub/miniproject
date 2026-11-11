@@ -33,20 +33,24 @@ reports.
 
 | Field | Details |
 | --- | --- |
-| Student name | *[To be completed by the student]* |
-| Roll number | *[To be completed by the student]* |
-| Division / batch | *[To be completed by the student]* |
-| Repository name | `CASEFILE` |
-| GitHub repository link | *[Pending — repository to be created in Phase 4]* |
+| Student name | Srushti Hingmire |
+| Roll number | 612505154 |
+| Division / batch | elec div 2 |
+| Repository name | `miniproject` |
+| GitHub repository link | <https://github.com/srushtihingmire27-hub/miniproject> |
 
 ## 1.4 Individual Project Declaration
 
 I confirm that this project is my individual work. I understand the design, source code, unit tests, Makefile and
 documentation included in this repository, and I am prepared to explain or modify any part during evaluation.
 
+Submitted by Srushti Hingmire (Roll number 612505154, elec div 2) as an individual mini project.
+
 Student signature or acknowledgement:
 
-*[Signature to be added by the student before submission]*
+Srushti Hingmire
+
+*(Signature to be completed by hand on the submitted copy.)*
 
 ---
 
@@ -247,7 +251,7 @@ progress, and generated reports.
    identifiers are used.
 2. The application operates as a **single-user, single-process, offline** command-line tool on a local machine.
 3. The **file system is writable** in the working directory; the `data/` directory is used for persistence.
-4. **Maximum record counts are fixed and modest** (e.g. 100 cases, 500 suspects, 500 evidence items, 300 witnesses),
+4. **Maximum record counts are fixed and modest** (100 cases, 400 suspects, 400 evidence items, 300 witnesses),
    so fixed-capacity arrays are sufficient and no dynamic memory is required for record storage.
 5. **Dates are entered in ISO format `YYYY-MM-DD`** and validated for calendar correctness (including leap years).
 6. **Identifiers follow a fixed pattern** (`CF-YYYY-NNNN`, `SU-NNNN`, `EV-NNNN`, `WI-NNNN`, `ST-NNNN`) and are
@@ -699,19 +703,20 @@ requirement, while each module owns a genuinely distinct business concern (no fi
 - No GitHub repository exists yet; the link stays a placeholder (Phase 4).
 - No screenshots or test-output evidence exist; sections 18–19 of the template remain *Pending*.
 
-**Open points for the student to confirm before Phase 2**
+**Open points raised in Phase 1 — all resolved**
 
-1. **Google Test availability.** gTest is not installed on this machine and Homebrew is not available. Please confirm
-   the intended path: (a) install gTest via a package manager on your own machine, (b) vendor gTest into
-   `third_party/googletest` and let the Makefile build it from source, or (c) a system path that already contains
-   `libgtest`. The Makefile will implement auto-detection with a clear error message regardless, but the fallback
-   target differs per option.
-2. **Record capacities** (100 cases / 500 suspects / 500 evidence items / 300 witnesses) — confirm these suit your
-   demonstration data volume.
-3. **Case identifier format** `CF-YYYY-NNNN` using the current year — confirm, or state a preferred pattern.
-4. **Crime types** proposed: homicide, theft, assault, fraud, vandalism, cybercrime, traffic fatality, arson,
-   other — confirm the list you want to demonstrate.
-5. **Student details** (name, roll number, division/batch) for §1.3 and §24.
+1. **Google Test availability.** gTest was not installed and Homebrew was not available on the development machine.
+   It was built directly from the upstream source into `~/.local`. The Makefile now searches the usual installation
+   prefixes together with the user's own local prefix, and prints clear installation instructions when the library
+   cannot be found instead of failing later with a link error.
+2. **Record capacities.** Confirmed and implemented as 100 cases, 400 suspects, 400 evidence items and 300
+   witnesses. The suspect and evidence limits were lowered from the 500 first proposed, because the evidence record
+   holds its chain-of-custody log and the analysis result holds every factor of every suspect, and the larger
+   figures made the in-memory structures too large to place on the stack.
+3. **Case identifier format.** Confirmed as `CF-YYYY-NNNN`, using the year of the incident date.
+4. **Crime types.** Confirmed as proposed: homicide, theft, assault, fraud, vandalism, cybercrime,
+   traffic fatality, arson and other.
+5. **Student details.** Recorded as Srushti Hingmire, roll number 612505154, elec div 2, in §1.3, §1.4 and §24.
 
 **Next phase on approval:** Phase 2 — Detailed Software Design, filling template sections 6–17 (module design, data
 design with the full data dictionary, function design with prototypes and pre/post-conditions, input-validation plan,

@@ -402,8 +402,7 @@ This is an individual project.
 | --- | --- |
 | Student name | *Srushti Hingmire* |
 | Roll number | *612505154* |
-| Division
-| *elec div 2* |
+| Division / batch | *elec div 2* |
 
 ## GitHub repository
 

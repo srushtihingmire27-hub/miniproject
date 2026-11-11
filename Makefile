@@ -74,8 +74,11 @@ ifneq ($(GTEST_ROOT),)
   endif
 else
   # Try the common installation prefixes, then a plain system location.
+  # $(HOME) is included so that a locally built Google Test under ~/.local is
+  # found without any extra configuration.
   GTEST_CANDIDATE_DIRS := /opt/homebrew/opt/googletest /usr/local/opt/googletest \
-                          /opt/homebrew /usr/local /usr
+                          /opt/homebrew /usr/local /usr \
+                          $(HOME)/.local $(HOME)/local $(HOME)/opt
   GTEST_FOUND :=
   GTEST_LIBS  :=
   GTEST_INC   :=

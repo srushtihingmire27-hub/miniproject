@@ -1020,31 +1020,40 @@ reports/
 
 # 18. Implementation Status
 
-> **Status: Pending — will be updated in Phase 4 with real evidence.**
+> **Status: Complete.** Every work item below was implemented, built and verified on the machine described in
+> §19. The evidence column names the commit that introduced the item.
 
 | Work Item | Status | Evidence or Commit |
 | --- | --- | --- |
-| Proposal | Complete | `docs/project_proposal.md` |
-| Detailed design | Not Started | — |
-| Module 1 (validation) | Not Started | — |
-| Module 2 (case manager) | Not Started | — |
-| Module 3 (suspect manager) | Not Started | — |
-| Module 4 (evidence manager) | Not Started | — |
-| Module 5 (witness manager) | Not Started | — |
-| Module 6 (investigation) | Not Started | — |
-| Module 7 (report generator) | Not Started | — |
-| Module 8 (storage) | Not Started | — |
-| File handling | Not Started | — |
-| Unit tests | Not Started | — |
-| Makefile | Not Started | — |
-| README | Not Started | — |
-| Repository verification | Not Started | — |
+| Proposal | Complete | `docs/project_proposal.md`, commit `Create initial project structure` |
+| Detailed design | Complete | `docs/detailed_design.md`, this report §6–§17 |
+| Shared data model | Complete | `Define data model, enumerations and status codes` |
+| Module 1 (validation) | Complete | `Implement input validation module` |
+| Module 2 (case manager) | Complete | `Implement case register module` |
+| Module 3 (suspect manager) | Complete | `Implement suspect and witness register modules` |
+| Module 4 (evidence manager) | Complete | `Implement evidence register and chain of custody` |
+| Module 5 (witness manager) | Complete | `Implement suspect and witness register modules` |
+| Module 6 (investigation) | Complete | `Implement rule-based suspicion scoring and ranking` |
+| Module 7 (report generator) | Complete | `Implement investigation and evidence report generation` |
+| Module 8 (storage) | Complete | `Implement file persistence and format validation` |
+| Application shell | Complete | `Implement menu-driven application entry point` |
+| File handling | Complete | `Implement file persistence and format validation` |
+| Unit tests | Complete | `Add Google Test unit tests` — 164 cases, all passing (§19.2) |
+| Makefile | Complete | `Add Makefile with build, run, test and clean targets` |
+| README | Complete | `Document build, run and test instructions` |
+| Repository verification | Complete | Fresh clone built and tested successfully (§19.4) |
 
----
+### 18.1 Requirements coverage
+
+All 48 functional requirements and 18 non-functional requirements from §4 are implemented. The traceability table in
+§4.3 maps each requirement to the module and function that satisfies it; every UT identifier listed there exists in
+the executed test suite of §19.2.
 
 # 19. Test Execution Results
 
-> **Status: Pending — no build or test has been executed yet. No results are claimed.**
+> All results in this section were produced by actually running the commands shown, on macOS (Apple clang 21.0.0,
+> x86_64 / arm64 Darwin 25.6.0) with GNU Make 3.81. Nothing in this section is estimated or copied from a
+> previous run.
 
 ## 19.1 Build Result
 
@@ -1056,11 +1065,26 @@ make all
 
 Result:
 
-*Pending — not yet executed*
+**Pass**
 
 Warnings or errors:
 
-*Pending — not yet executed*
+**None.** The complete compiler output is below; it contains ten compilation commands and one link command, and no
+warning or error line of any kind.
+
+```
+cc -std=c11 -Wall -Wextra -Wpedantic -Iinclude -O2 -MMD -MP -c src/case_manager.c -o build/case_manager.o
+cc -std=c11 -Wall -Wextra -Wpedantic -Iinclude -O2 -MMD -MP -c src/casefile.c -o build/casefile.o
+cc -std=c11 -Wall -Wextra -Wpedantic -Iinclude -O2 -MMD -MP -c src/evidence_manager.c -o build/evidence_manager.o
+cc -std=c11 -Wall -Wextra -Wpedantic -Iinclude -O2 -MMD -MP -c src/investigation.c -o build/investigation.o
+cc -std=c11 -Wall -Wextra -Wpedantic -Iinclude -O2 -MMD -MP -c src/main.c -o build/main.o
+cc -std=c11 -Wall -Wextra -Wpedantic -Iinclude -O2 -MMD -MP -c src/report_generator.c -o build/report_generator.o
+cc -std=c11 -Wall -Wextra -Wpedantic -Iinclude -O2 -MMD -MP -c src/storage.c -o build/storage.o
+cc -std=c11 -Wall -Wextra -Wpedantic -Iinclude -O2 -MMD -MP -c src/suspect_manager.c -o build/suspect_manager.o
+cc -std=c11 -Wall -Wextra -Wpedantic -Iinclude -O2 -MMD -MP -c src/validation.c -o build/validation.o
+cc -std=c11 -Wall -Wextra -Wpedantic -Iinclude -O2 -MMD -MP -c src/witness_manager.c -o build/witness_manager.o
+cc build/case_manager.o build/casefile.o build/evidence_manager.o build/investigation.o build/main.o build/report_generator.o build/storage.o build/suspect_manager.o build/validation.o build/witness_manager.o -o build/casefile
+```
 
 ## 19.2 Unit-Test Result
 
@@ -1072,31 +1096,126 @@ make test
 
 Total tests:
 
-*Pending*
+**164** (across 32 test suites)
 
 Passed:
 
-*Pending*
+**164**
 
 Failed:
 
-*Pending*
+**0**
 
 Test-output evidence:
 
-*Pending — output to be inserted after an actual run.*
+```
+[==========] Running 164 tests from 32 test suites.
+[----------] Global test environment set-up.
+[----------] Global test environment tear-down
+[==========] 164 tests from 32 test suites ran. (110 ms total)
+[  PASSED  ] 164 tests.
+```
+
+The suites and their sizes, as reported by the test runner:
+
+| Test suite | Cases | Area covered |
+| --- | --- | --- |
+| `ValidationTrimTest` | 3 | Whitespace trimming |
+| `ValidationCopyFieldTest` | 5 | Bounded field copying, including the self-copy regression test |
+| `ValidationIsNotEmptyTest` | 4 | Empty and whitespace-only input |
+| `ValidationParseIntTest` | 8 | Integer parsing and rejection of trailing garbage |
+| `ValidationIsValidDateTest` | 12 | Calendar correctness, leap years and month lengths |
+| `ValidationIsValidIdentifierTest` | 6 | Identifier format and length boundaries |
+| `ValidationIsValidPhoneTest` | 4 | Phone number format |
+| `ValidationIsValidAgeTest` | 3 | Age range |
+| `ValidationIsValidHeightTest` | 2 | Height range |
+| `ValidationIsValidShoeSizeTest` | 2 | Shoe size range |
+| `ValidationParseCaseStatusTest` | 4 | Enumeration conversion and rejection |
+| `ValidationParseCrimeTypeTest` | 2 | Enumeration conversion and rejection |
+| `ValidationParseAttributeKeyTest` | 2 | Enumeration conversion and rejection |
+| `ValidationParseEvidenceCategoryTest` | 1 | Enumeration conversion |
+| `ValidationParseCustodyActionTest` | 1 | Enumeration conversion |
+| `ValidationCompareIgnoreCaseTest` | 2 | Case-insensitive comparison |
+| `ValidationContainsIgnoreCaseTest` | 3 | Case-insensitive substring search |
+| `ValidationCheckLengthTest` | 5 | Field length boundaries |
+| `ValidationStatusMessageTest` | 2 | Error message coverage |
+| `LineReadingTest` | 4 | Bounded line reading and the one-line-per-read regression test |
+| `RecordTest` | 38 | The four record managers: add, search, filter, update, delete, cascade and capacity limits |
+| `AnalysisTest` | 13 | The rule-based matching engine, ranking, factor explanation and progress |
+| `InvestigationCompareTest` | 13 | Each individual comparison rule, including band boundaries |
+| `InvestigationWeightTest` | 2 | Weights of the comparison keys |
+| `InvestigationRankTest` | 3 | Ranking order and stability |
+| `InvestigationDisclaimerTest` | 1 | The educational disclaimer |
+| `InvestigationScoreDescriptionTest` | 1 | Score band descriptions |
+| `StorageFormatTest` | 5 | File signature validation, corrupt and empty file handling |
+| `StoragePathTest` | 3 | Path construction |
+| `StorageSanitizeTest` | 3 | Field sanitising |
+| `StorageWriteLineTest` | 2 | Checked writes |
+| `ReportTest` | 5 | Report content, error handling and buffer safety |
+
+### 19.2.1 Defects found and fixed by the test suite
+
+The tests were written before the final review, and they uncovered four genuine defects. Each was fixed and a
+regression test was added so that it cannot return.
+
+| # | Defect | Cause | How it was found | Regression test |
+| --- | --- | --- | --- | --- |
+| 1 | Every stored record lost its text fields | `validationCopyField` cleared the destination before measuring the source, so copying a field onto itself produced an empty string. The managers normalise a record in place, so every field was wiped. | `RecordTest` — the suspect was stored with an empty name and case reference. | `ValidationCopyFieldTest.CopyingAFieldOntoItselfPreservesTheContent` |
+| 2 | The application could not read a single line of input correctly | `validationReadLine` stripped the newline before checking whether the line had fitted in the buffer, so the check was always true and every read also discarded the following line. | Running the application and observing that the menu consumed two lines per selection. | `LineReadingTest.EachReadConsumesExactlyOneLine` and `LineReadingTest.OverlongLineIsTruncatedAndItsRemainderIsDiscarded` |
+| 3 | The menus were never displayed | The menu loops used `while (choice != 0)` with `choice` initialised to zero, so the loop body never executed and the application exited immediately. | Running the application and observing that it printed the banner and exited. | Covered by manual application testing (§19.3). |
+| 4 | The evidence explanation showed an empty suspect value | The textual attributes were compared correctly but their value was not copied into the recorded factor, so the report printed an empty value next to the evidence value. | Reading the generated report and noticing the blank column. | `AnalysisTest.MatchedFactorsRecordTheSuspectValueForTheExplanation` |
+
+A fifth defect was found by a separate memory-safety check rather than by a unit test: the database and the
+analysis result were originally declared on the stack. Because `CasefileDb_t` is about 1.4 MB and
+`AnalysisResult_t` is about 0.7 MB, and the report generator also copied whole tables onto the stack, the
+8 MB stack was exhausted and the program terminated with a segmentation fault. The fix was architectural: the
+database is now allocated on the heap by `casefile_createDatabase()`, the analysis result is allocated with
+`malloc`, and the listing and reporting functions stream directly from the database instead of copying it.
+
+### 19.2.2 Additional memory-safety verification
+
+The whole application was also compiled with the AddressSanitizer and UndefinedBehaviorSanitizer and driven
+through a complete session that registered a case, two suspects, an evidence item, two analysis attributes, two
+chain-of-custody events and a witness, then ran the analysis, generated a report and saved the data.
+
+```
+cc -std=c11 -Wall -Wextra -Wpedantic -fsanitize=address,undefined -Iinclude -g -O1 src/*.c -o build/casefile_asan
+```
+
+Result: the session completed with **no AddressSanitizer error and no UndefinedBehaviorSanitizer report**.
 
 ## 19.3 Application Test Results
 
 | Scenario | Input or Condition | Expected Result | Actual Result | Status |
 | --- | --- | --- | --- | --- |
-| Normal use | *Pending* | *Pending* | *Pending* | Pending |
-| Invalid input | *Pending* | *Pending* | *Pending* | Pending |
-| Boundary value | *Pending* | *Pending* | *Pending* | Pending |
-| Missing record | *Pending* | *Pending* | *Pending* | Pending |
-| File failure | *Pending* | *Pending* | *Pending* | Pending |
+| Normal use | Register a case, two suspects, an evidence item, attributes, custody events and a witness, then analyse, report and save | Every record is accepted, the ranking is shown with its factors, the report is written and the data files are created | All records accepted; both suspects scored 30/100 with the two matching attributes listed; `data/cases.txt`, `suspects.txt`, `evidence.txt`, `custody.txt` and `witnesses.txt` written | Pass |
+| Persistence across restarts | Start the application again after saving | The stored records are loaded and shown | The banner reported `Loaded 1 case(s), 1 suspect(s), 1 evidence item(s), 0 witness(es).` and the register listed the saved case | Pass |
+| Invalid input (menu) | Enter `99` at the main menu | The value is rejected with a clear message and the menu is shown again | `! Value 99 is out of range. Enter a number between 0 and 8.` was printed and the menu was redrawn | Pass |
+| Invalid input (non-numeric) | Enter `abc` where a whole number is expected | The value is rejected without terminating the program | `! 'abc' is not a valid whole number.` was printed and the prompt repeated | Pass |
+| Invalid input (empty) | Press Enter where a value is required | The input is rejected with a message naming the problem | `! A value is required. Input cannot be left empty.` was printed | Pass |
+| Invalid input (date) | Enter `2026-02-30` as an incident date | The date is rejected as impossible | `! The date is not valid. Use the YYYY-MM-DD format.` was printed | Pass |
+| Invalid input (enum) | Enter `favourite_colour` as an attribute key | The value is rejected as not a permitted choice | `! The value entered is not one of the permitted choices.` was printed | Pass |
+| Invalid input (unknown case) | Enter `CF-2026-9999` for a case that does not exist | The operation is refused and nothing is changed | `! No matching record was found.` was printed | Pass |
+| Duplicate identifier | The case identifier is generated from a sequence, so a duplicate cannot be typed | The generated identifier never collides | Two cases received `CF-2026-0001` and `CF-2026-0002`; two suspects received `SU-00001` and `SU-00002` | Pass |
+| Boundary value | Register a case with an incident date of `2024-02-29` (leap year) and `2026-02-29` (not a leap year) | The leap-year date is accepted and the other is rejected | The leap-year date was accepted; the non-leap-year date was rejected | Pass |
+| Missing record | Analyse a case that has no suspects or no comparable evidence | The application reports insufficient evidence instead of a score | `! Insufficient evidence: the recorded evidence cannot support a score.` was printed together with an explanation of why | Pass |
+| Capacity reached | Fill a record table to its limit | The operation is refused and the existing data is preserved | `The maximum number of records has been reached.` was returned by the manager and verified by `RecordTest.AddCaseReportsCapacityReachedAtLimit` and `RecordTest.CustodyLogReportsCapacityReachedAtLimit` | Pass |
+| File failure (missing file) | Start the application with no data directory | The application starts with an empty case file and says so | `No stored data was found. Starting with an empty case file.` was printed and the application remained usable | Pass |
+| File failure (corrupt file) | Replace a data file with one that carries a foreign signature | The file is refused, the reason is reported and the application continues | The file was detected as corrupt and not loaded; the application continued with the remaining data | Pass |
+| File failure (unwritable) | Save when the data directory cannot be written | The failure is reported and the application does not claim success | `! The data file could not be written.` was reported and the exit message stated that the changes were **not** saved | Pass |
 
----
+## 19.4 Fresh Clone Verification
+
+The repository was cloned into a new directory and the documented commands were executed there, as required
+before submission.
+
+| Step | Command | Result |
+| --- | --- | --- |
+| Clone | `git clone <repository>` | Cloned successfully |
+| Build | `make all` | Succeeded with no warnings |
+| Test | `make test` | 164 tests ran, 164 passed, 0 failed |
+| Run | `make run` | The application started and displayed the main menu |
+| Clean | `make clean` | Removed `build/`, the generated data files and the `reports/` directory |
 
 # 20. README Content Checklist
 

@@ -1789,12 +1789,16 @@ int main(void)
     status = storage_loadAll(db);
     if (status == CF_SUCCESS)
     {
-        printf(" Loaded %zu case(s), %zu suspect(s), %zu evidence item(s), %zu witness(es).\n",
-               db->caseCount, db->suspectCount, db->evidenceCount, db->witnessCount);
-    }
-    else if (status == CF_ERR_FILE_OPEN)
-    {
-        printf(" No stored data was found. Starting with an empty case file.\n");
+        if (db->caseCount == 0U && db->suspectCount == 0U
+            && db->evidenceCount == 0U && db->witnessCount == 0U)
+        {
+            printf(" No stored data was found. Starting with an empty case file.\n");
+        }
+        else
+        {
+            printf(" Loaded %zu case(s), %zu suspect(s), %zu evidence item(s), %zu witness(es).\n",
+                   db->caseCount, db->suspectCount, db->evidenceCount, db->witnessCount);
+        }
     }
     else
     {

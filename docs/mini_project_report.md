@@ -1219,32 +1219,30 @@ before submission.
 
 # 20. README Content Checklist
 
-> **Status: Pending — to be confirmed in Phase 5 when `README.md` is written.**
+Confirmed against the `README.md` in the repository root.
 
-- [ ] Project title
-- [ ] Engineering domain
-- [ ] Problem statement
-- [ ] Proposed solution
-- [ ] Features
-- [ ] Architecture diagram
-- [ ] Module descriptions
-- [ ] Folder structure
-- [ ] C concepts used
-- [ ] Coding standards
-- [ ] Prerequisites
-- [ ] Build instructions
-- [ ] Run instructions
-- [ ] Test instructions
-- [ ] Sample input
-- [ ] Sample output
-- [ ] Unit-testing summary
-- [ ] Error-handling summary
-- [ ] Team members
-- [ ] Known limitations
-- [ ] Future enhancements
-- [ ] GitHub repository link
-
----
+- [x] Project title
+- [x] Engineering domain
+- [x] Problem statement
+- [x] Proposed solution
+- [x] Features
+- [x] Architecture diagram
+- [x] Module descriptions
+- [x] Folder structure
+- [x] C concepts used
+- [x] Coding standards
+- [x] Prerequisites
+- [x] Build instructions
+- [x] Run instructions
+- [x] Test instructions
+- [x] Sample input
+- [x] Sample output
+- [x] Unit-testing summary
+- [x] Error-handling summary
+- [x] Team members
+- [x] Known limitations
+- [x] Future enhancements
+- [x] GitHub repository link
 
 # 21. Demonstration Plan
 
@@ -1269,33 +1267,105 @@ before submission.
 
 # 22. Reflection
 
-> **Status: Pending — to be written in Phase 5, after the implementation and testing experience is real.**
-
 ## 22.1 What Worked Well?
 
-*Pending Phase 5.*
+**Designing the data model before writing any code.** The proposal phase settled the structures, the enumerations and
+the capacity constants, and every module was written against that single shared header. There was never a moment
+where two modules disagreed about what a record looked like, which is exactly the problem the shared `casefile.h`
+was meant to prevent.
+
+**Passing the database by pointer instead of using a global.** This was the single decision that paid for itself the
+most. Because no module reaches for a global, the entire application could be exercised from gTest without any
+global setup: a test creates a database, calls the module and checks the result. The alternative — a global
+database — would have made every test order-dependent and would have been very hard to justify at evaluation.
+
+**The status-code discipline.** Requiring every fallible function to return a `CfStatus_t` forced the error paths to
+be written at the same time as the happy path. It is why the application can report "the maximum number of records
+has been reached" or "the data file contains content in an unrecognised format" instead of crashing or silently
+doing the wrong thing.
+
+**Writing the tests before the final review.** The unit tests found four genuine defects that a manual walk-through
+had missed, including a defect that wiped every stored text field. All four are now covered by a regression test.
 
 ## 22.2 Challenges Faced
 
-*Pending Phase 5.*
+**Sizing the data model.** The first version used generous field lengths and large capacities, which made
+`CasefileDb_t` about 2.8 MB. Declaring it on the stack, as the design originally suggested, exhausted the 8 MB
+stack: the program terminated with a segmentation fault as soon as a report was generated. The same mistake appeared
+in the listing functions, which copied a whole table into a local array.
+
+**Knowing when a "score of zero" is a lie.** The first version of the analysis returned a score of 0 when the
+evidence carried no comparable attribute. A score of zero reads as "nothing matched", but the truth is "nothing could
+be compared". The two cases now have separate outcomes, and the insufficient-evidence path is tested.
+
+**Making the input reader correct.** Reading a line with a fixed-size buffer has a subtlety: if the text is longer
+than the buffer, the rest of the line stays in the input stream. The first implementation stripped the newline before
+checking for that case, so the check was always true and every read silently discarded the following line. This was
+invisible in code review and obvious the moment the application was run.
+
+**Finding Google Test.** The development machine had no package manager and no Google Test, and no CMake. It was
+built directly from the upstream source into a local prefix, and the Makefile was given an automatic search that
+reports a clear message when the library is genuinely absent.
 
 ## 22.3 How Were the Challenges Resolved?
 
-*Pending Phase 5.*
+The stack problem was solved architecturally rather than with a larger limit: the database and the analysis result
+were moved to the heap and given explicit create and destroy functions, and the listing and reporting functions were
+rewritten to stream directly from the database instead of copying it. The whole application was then rebuilt with the
+AddressSanitizer and the UndefinedBehaviorSanitizer and driven through a complete session, which reported no memory
+error at all.
+
+The scoring distinction was solved by giving the analysis engine a third outcome. `investigation_analyseCase` now
+returns `CF_ERR_INSUFFICIENT_EVIDENCE` when the case has no suspects or no comparable evidence, and the application
+prints an explanation instead of a number. A unit test covers each of the two cases.
+
+The input reader was fixed by reordering the two steps — check for a newline, discard the remainder, and only then
+strip the newline — and by adding the three regression tests described in §19.2.1.
+
+Google Test was solved by building it from source into `~/.local` and by giving the Makefile a search over the usual
+installation prefixes plus the user's own local prefix, with `GTEST_ROOT` available for anything unusual.
 
 ## 22.4 What Did You Learn?
 
-*Pending Phase 5 — covering C programming, modular design, coding standards, unit testing, Makefiles, Git and
-GitHub.*
+**C programming.** That a fixed-size buffer and `fgets` are the only safe way to read user input, and that the order
+of the steps matters more than the code itself. That `memcpy` with overlapping regions — which is what a
+self-copying field copy is — is undefined behaviour, even when the two pointers are identical and it appears to
+work. That a struct that holds an array of structs multiplies: 400 evidence items, each holding 12 custody events
+of 168 bytes, is more than 800 KB on its own, so the capacity constants are a design decision with a memory cost,
+not just a number.
+
+**Modular design.** That the boundary between modules is what makes the project testable. The line that
+`investigation` reads the records through the managers' public functions instead of touching the arrays directly is
+the line that lets the analysis engine be tested on its own.
+
+**Coding standards.** That a rule like "every function returns a status code" is not bureaucracy: it is what turns a
+silent wrong answer into a message the user can act on.
+
+**Unit testing.** That a test which passes is worth much less than a test which fails for the right reason. Each of
+the four defects was found by a test that asserted something specific, and each fix was protected by a test that
+would fail again if the defect returned. That a bug can live in a helper function and corrupt everything that calls
+it — the field-copying defect did exactly that — and that unit tests are how you find that before the demonstration.
+
+**Makefiles.** That the automatic dependency files (`-MMD -MP`) and the `include` of the `.d` files make the build
+rebuild only what changed, and that a build which links the application's `main.o` into the test binary fails in a
+confusing way that has to be understood rather than worked around.
+
+**Git and GitHub.** That a history of small, meaningful commits is a form of documentation. Reading the list of
+commit messages tells the story of how the project was built, which is exactly what the submission guidelines ask
+for.
 
 ## 22.5 Known Limitations
 
 1. Single-user, single-process command-line application with file-based storage.
-2. Fixed record capacities declared as constants; no dynamic growth.
-3. The suspicion score is a transparent rule-based indicator for prioritising leads, not a forensic conclusion or
-   a measure of guilt.
-4. Evidence content is textual metadata only; no binary attachments, imaging or laboratory analysis.
-5. Search facilities are exact and substring matching; no indexing, regular expressions or date-range queries.
+2. Fixed record capacities (100 cases, 400 suspects, 400 evidence items, 300 witnesses); the "capacity reached"
+   condition is reported rather than growing the tables.
+3. The suspicion score is a transparent rule-based indicator for prioritising leads — not a forensic conclusion, not
+   a probability, and not a measure of guilt.
+4. Evidence content is textual metadata only; there are no binary attachments, imaging or laboratory analysis.
+5. Search is exact or substring matching; there is no indexing, regular expressions or date-range querying.
+6. The report format is plain text; there is no PDF or HTML export.
+7. The data files are rewritten in full on every save, which is fine at the documented capacities but would not
+   scale to a large register.
 
 ## 22.6 Future Enhancements
 
@@ -1304,13 +1374,9 @@ GitHub.*
 3. Export of reports to PDF/HTML and printing support.
 4. Role-based access, an operation audit trail and encrypted storage of sensitive fields.
 5. A formal statistical confidence measure expressed alongside the rule score, with clearly stated assumptions.
-6. Integration with an actual laboratory information system through a defined interchange format.
-
----
+6. Integration with a laboratory information system through a defined interchange format.
 
 # 23. Final Submission Checklist
-
-> **Status: Pending — items are re-verified against real evidence in Phase 5.**
 
 ## Proposal and Design
 
@@ -1323,65 +1389,65 @@ GitHub.*
 - [x] Non-functional requirements are documented.
 - [x] Architecture diagram is included.
 - [x] Modules are identified.
-- [ ] Data structures are designed *(Phase 2)*
-- [ ] Major functions are specified *(Phase 2)*
-- [ ] Error-handling strategy is defined *(Phase 2)*
-- [ ] Unit-test plan is complete *(Phase 2)*
+- [x] Data structures are designed.
+- [x] Major functions are specified.
+- [x] Error-handling strategy is defined.
+- [x] Unit-test plan is complete.
 
 ## Implementation
 
-- [ ] Multiple C source files are used *(Phase 3)*
-- [ ] Header files are provided *(Phase 3)*
-- [ ] `main.c` contains high-level control only *(Phase 3)*
-- [ ] Structures are used meaningfully *(Phase 3)*
-- [ ] Functions have clear parameters and return values *(Phase 3)*
-- [ ] Input is validated *(Phase 3)*
-- [ ] File operations are checked *(Phase 3)*
-- [ ] Errors are handled *(Phase 3)*
-- [ ] Coding standards are followed *(Phase 3)*
-- [ ] Code compiles without warnings *(Phase 4)*
-- [ ] No unnecessary or unused code remains *(Phase 4)*
+- [x] Multiple C source files are used.
+- [x] Header files are provided.
+- [x] `main.c` contains high-level control only.
+- [x] Structures are used meaningfully.
+- [x] Functions have clear parameters and return values.
+- [x] Input is validated.
+- [x] File operations are checked.
+- [x] Errors are handled.
+- [x] Coding standards are followed.
+- [x] Code compiles without warnings.
+- [x] No unnecessary or unused code remains.
 
 ## Unit Testing
 
-- [ ] gTest is used *(Phase 3)*
-- [ ] At least three important functions are tested *(Phase 3)*
-- [ ] At least ten meaningful tests are included *(Phase 3)*
-- [ ] Positive tests are included *(Phase 3)*
-- [ ] Negative tests are included *(Phase 3)*
-- [ ] Boundary tests are included *(Phase 3)*
-- [ ] Tests are independent and repeatable *(Phase 3)*
-- [ ] `make test` works *(Phase 4)*
-- [ ] All tests pass *(Phase 4)*
+- [x] gTest is used.
+- [x] At least three important functions are tested (eight modules are covered).
+- [x] At least ten meaningful tests are included (164 are included).
+- [x] Positive tests are included.
+- [x] Negative tests are included.
+- [x] Boundary tests are included.
+- [x] Tests are independent and repeatable.
+- [x] `make test` works.
+- [x] All tests pass.
 
 ## Makefile
 
-- [ ] `make all` works *(Phase 3)*
-- [ ] `make run` works *(Phase 3)*
-- [ ] `make test` works *(Phase 3)*
-- [ ] `make clean` works *(Phase 3)*
+- [x] `make all` works.
+- [x] `make run` works.
+- [x] `make test` works.
+- [x] `make clean` works.
 
 ## Git and GitHub
 
-- [ ] Git was used throughout development *(Phase 4)*
-- [ ] Multiple meaningful commits are present *(Phase 4)*
-- [ ] `.gitignore` is configured *(Phase 2)*
-- [ ] Generated files are not committed *(Phase 4)*
-- [ ] The repository contains the complete project *(Phase 4)*
-- [ ] The repository was cloned and verified independently *(Phase 4)*
-- [ ] The correct GitHub link is submitted *(Phase 4)*
+- [x] Git was used throughout development.
+- [x] Multiple meaningful commits are present.
+- [x] `.gitignore` is configured.
+- [x] Generated files are not committed.
+- [x] The repository contains the complete project.
+- [x] The repository was cloned and verified independently (§19.4).
+- [ ] The correct GitHub link is submitted *(pending the publication step)*.
 
 ## Documentation
 
-- [ ] README is complete *(Phase 5)*
-- [ ] Architecture is documented *(Phase 2)*
-- [ ] Repository structure is documented *(Phase 2)*
-- [ ] Build instructions are correct *(Phase 5)*
-- [ ] Run instructions are correct *(Phase 5)*
-- [ ] Test instructions are correct *(Phase 5)*
-- [ ] Sample output is included *(Phase 5)*
-- [ ] Limitations are documented *(Phase 5)*
-- [ ] Future enhancements are documented *(Phase 5)*
+- [x] README is complete.
+- [x] Architecture is documented.
+- [x] Repository structure is documented.
+- [x] Build instructions are correct.
+- [x] Run instructions are correct.
+- [x] Test instructions are correct.
+- [x] Sample output is included.
+- [x] Limitations are documented.
+- [x] Future enhancements are documented.
 
 ---
 
